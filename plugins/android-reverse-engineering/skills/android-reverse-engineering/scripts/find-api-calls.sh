@@ -158,9 +158,65 @@ if [[ "$SEARCH_ALL" == true || "$SEARCH_PATHS" == true ]]; then
 fi
 
 # --- Hardcoded URLs ---
+# A loose grep for http(s)://... drowns in compression-dictionary garbage and
+# in third-party SDK URLs (Google, Firebase, AppsFlyer, Datadog, ...). The
+# strict regex requires a syntactically valid hostname and rejects strings
+# containing whitespace, angle brackets, or non-printable bytes. Hosts are
+# then bucketed into "first-party candidates" vs "third-party (denylist)".
 if [[ "$SEARCH_ALL" == true || "$SEARCH_URLS" == true ]]; then
-  section "Hardcoded URLs (http:// and https://)"
-  run_grep '"https?://[^"]+'
+  HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  DENYLIST="$HERE/../references/third_party_hosts.txt"
+  # Hostname must have at least one dot and end in a 2+ letter TLD.
+  STRICT_URL='https?://[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)+\.[A-Za-z]{2,}(:[0-9]{1,5})?(/[^"<>[:space:]]*)?'
+
+  TMP="$(mktemp)"
+  trap 'rm -f "$TMP"' EXIT
+  grep -rhoE --include='*.java' --include='*.kt' "$STRICT_URL" "$SOURCE_DIR" 2>/dev/null \
+      | sort -u > "$TMP"
+
+  # Extract host: strip scheme, take part up to first ':' or '/'.
+  HOSTS_TMP="$(mktemp)"
+  sed -E 's#^https?://##; s#[/:].*$##' "$TMP" | sort -u > "$HOSTS_TMP"
+
+  if [[ -f "$DENYLIST" ]]; then
+    # Build a single combined regex from the denylist (one line each).
+    DENY_REGEX="$(grep -vE '^\s*(#|$)' "$DENYLIST" | tr '\n' '|' | sed 's/|$//')"
+    THIRD_HOSTS=$(grep -E "$DENY_REGEX" "$HOSTS_TMP" || true)
+    FIRST_HOSTS=$(grep -vE "$DENY_REGEX" "$HOSTS_TMP" || true)
+  else
+    THIRD_HOSTS=""
+    FIRST_HOSTS=$(cat "$HOSTS_TMP")
+  fi
+
+  section "Likely First-Party Hosts (frequency-sorted)"
+  if [[ -n "$FIRST_HOSTS" ]]; then
+    while IFS= read -r h; do
+      [[ -z "$h" ]] && continue
+      n=$(grep -cE "://${h//./\\.}([/:\"]|$)" "$TMP" || true)
+      printf '  %5d  %s\n' "$n" "$h"
+    done <<< "$FIRST_HOSTS" | sort -rn -k1
+  else
+    echo "  (none — every URL matched the third-party denylist)"
+  fi
+
+  section "Third-Party Hosts (denylist matches, collapsed)"
+  if [[ -n "$THIRD_HOSTS" ]]; then
+    echo "$THIRD_HOSTS" | sed 's/^/  /'
+  else
+    echo "  (none)"
+  fi
+
+  section "All First-Party URLs (full strings)"
+  if [[ -n "$FIRST_HOSTS" ]]; then
+    while IFS= read -r h; do
+      [[ -z "$h" ]] && continue
+      grep -E "://${h//./\\.}([/:\"]|$)" "$TMP" | sed 's/^/  /'
+    done <<< "$FIRST_HOSTS"
+  fi
+
+  rm -f "$HOSTS_TMP" "$TMP"
+  trap - EXIT
+
   section "HttpURLConnection"
   run_grep '(openConnection|setRequestMethod|HttpURLConnection|HttpsURLConnection)'
   section "WebView URLs"
