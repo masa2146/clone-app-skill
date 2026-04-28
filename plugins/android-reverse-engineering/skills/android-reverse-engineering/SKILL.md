@@ -24,6 +24,31 @@ If anything is missing, follow the installation instructions in `${CLAUDE_PLUGIN
 
 ## Workflow
 
+### Phase 0: Fingerprint the App (recommended before anything else)
+
+Before installing tools or decompiling, run a fast triage to determine what
+kind of app you are looking at. **Decompiling Java is mostly useless for
+Flutter, React Native, Cordova/Capacitor, and Xamarin apps** — the real code
+lives elsewhere. The fingerprint script tells you which.
+
+```bash
+bash ${CLAUDE_PLUGIN_ROOT}/skills/android-reverse-engineering/scripts/fingerprint.sh <file.apk|file.xapk>
+```
+
+It prints, in one screen:
+
+- **Mobile framework** (Flutter / React Native / Cordova / Xamarin / Native Kotlin / etc.) with the file marker that triggered the verdict.
+- **HTTP stack** (Retrofit, OkHttp, Ktor, Apollo, Volley) detected via DEX string scan — works even when class names are obfuscated.
+- **DI / serialization** signals (Hilt, Dagger, Koin, kotlinx.serialization, Moshi, Gson, Jackson).
+- **Obfuscation level** estimate based on root-level short-named packages.
+- **Notable third-party SDKs** (AppsFlyer, Datadog, Sentry, Firebase, payment SDKs, support/chat SDKs, etc.).
+- **Consolidated native libraries** across the base APK and all splits — XAPK split bundles often place `.so` files in `config.<abi>.apk`, not in `base.apk`.
+- **Recommended next step**, which differs by framework (e.g. for Flutter the script suggests `blutter` / `strings libapp.so` rather than jadx).
+
+If the fingerprint says the app is Flutter / RN / Cordova / Xamarin, **stop**
+and switch to the framework-appropriate tooling. Phases 1–5 below assume a
+native (Java/Kotlin) Android app.
+
 ### Phase 1: Verify and Install Dependencies
 
 Before decompiling, confirm that the required tools are available — and install any that are missing.
