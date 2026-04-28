@@ -145,8 +145,9 @@ When code is obfuscated (ProGuard/R8):
 1. **Start from strings**: Search for URLs, error messages, and known constants
 2. **Start from framework classes**: Activities and Fragments are named in the manifest
 3. **Follow library calls**: Retrofit `@GET`/`@POST` annotations are readable even when the interface class name is obfuscated
-4. **Use `--deobf`**: jadx can generate readable replacement names
+4. **Recover original Kotlin names from metadata**: `@DebugMetadata` and `@Metadata.d2` strings preserve the original FQNs even after R8 obfuscation. Run `scripts/recover-kotlin-names.sh` to build an `obf -> real` map (typically recovers 30-50% of classes — and almost 100% of `*Repository` / `*ViewModel` / `*Impl`). See [`kotlin-name-recovery.md`](./kotlin-name-recovery.md). This is the single highest-leverage step on any Kotlin app.
 5. **Cross-reference**: If `class a` calls `Retrofit.create(b.class)`, then `b` is a Retrofit service interface
+6. **`--deobf` is rarely enough on its own**: jadx's `--deobf` renames obfuscated symbols with synthetic placeholders (`p001a`, `C0123Foo`) — useful for disambiguation but it does **not** recover original names. Pair it with the metadata recovery above.
 
 ## 8. Tracing a Complete Call Flow: Example
 

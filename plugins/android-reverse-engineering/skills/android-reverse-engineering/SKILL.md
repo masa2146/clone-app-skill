@@ -154,6 +154,33 @@ Navigate the decompiled output to understand the app's architecture.
    - Clean Architecture: look for `domain`, `data`, `presentation` packages
    - This informs where to look for network calls in the next phases
 
+### Phase 3.5: Recover Kotlin Class Names (only for obfuscated Kotlin apps)
+
+If Phase 0 reported moderate / high obfuscation **and** the app is Kotlin
+(Compose / kotlin_module markers detected), run the metadata recovery
+script before tracing call flows. R8 obfuscates JVM symbols but cannot
+strip Kotlin metadata strings, so original FQNs leak through
+`@DebugMetadata` and `@Metadata.d2`.
+
+```bash
+bash ${CLAUDE_PLUGIN_ROOT}/skills/android-reverse-engineering/scripts/recover-kotlin-names.sh \
+    <output>/sources <output>/mapping
+```
+
+Then use the lookup helper instead of plain grep — every hit comes
+annotated with the owning class's real name:
+
+```bash
+bash ${CLAUDE_PLUGIN_ROOT}/skills/android-reverse-engineering/scripts/lookup-name.sh \
+    <output>/mapping --grep '"/api/' <output>/sources
+```
+
+Typical recovery on a real-world Kotlin app: ~100% of `*Repository` /
+`*ViewModel` / `*UseCase` / `*Impl` classes, ~80% of DTOs.
+
+See `${CLAUDE_PLUGIN_ROOT}/skills/android-reverse-engineering/references/kotlin-name-recovery.md`
+for the full technique and limitations.
+
 ### Phase 4: Trace Call Flows
 
 Follow execution paths from user-facing entry points down to network calls.
