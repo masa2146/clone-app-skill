@@ -55,6 +55,65 @@ grep -rn 'Interceptor\|addInterceptor\|addNetworkInterceptor\|intercept(' source
 grep -rn '\.execute()\|\.enqueue(' sources/
 ```
 
+## Ktor (Kotlin)
+
+Ktor is the dominant HTTP client in Kotlin Multiplatform and modern
+Kotlin-only Android apps. Unlike Retrofit, Ktor does **not** use annotations
+to declare endpoints — paths appear as plain string arguments to
+`client.get(...)` / `client.post(...)`, often inside an extension function.
+
+```bash
+# Calls
+grep -rn '\b\(client\|httpClient\|HttpClient\)\.\(get\|post\|put\|delete\|patch\|head\|request\)\s*[<(]' sources/
+
+# Default request / base URL configuration
+grep -rn 'HttpRequestBuilder\|defaultRequest\s*{\|\burl\s*(\s*"\|URLBuilder' sources/
+
+# Auth plugin (bearer / refresh)
+grep -rn '\bbearer\s*{\|BearerTokens\s*(\|loadTokens\s*{\|refreshTokens\s*{' sources/
+```
+
+Typical Ktor call (after decompile):
+
+```java
+client.get("api/v1/users/profile") {
+    parameter("locale", "en-US");
+}
+```
+
+The base URL is usually applied via `defaultRequest { url { host = "..." } }`
+in the client builder. Search for `host =` and `URLProtocol.HTTPS` references
+to pin it down.
+
+**Note on obfuscation:** in heavily R8-shrunk apps the call site
+`client.get("path")` is inlined to something like `aVar.a(dVar, "path")`
+and the `client.<verb>(` regex misses it. The path string itself is **not**
+obfuscated, however — fall back to the generic path-literal search
+(`--paths`) for the endpoint inventory in those cases. Ktor library
+internals (`BearerTokens`, `loadTokens`, `refreshTokens`, `URLProtocol`)
+remain searchable because Ktor keeps these on its public API.
+
+Ktor's authentication plugin uses the
+[`Auth { bearer { loadTokens { ... }; refreshTokens { ... } } }`](https://ktor.io/docs/auth.html)
+DSL — bearer access tokens with automatic refresh. After R8, the DSL
+lambdas appear as `Function2`/`Function3` impls referencing
+`BearerTokens(...)` calls.
+
+## Apollo Kotlin (GraphQL)
+
+```bash
+# Client setup
+grep -rn 'ApolloClient\|\.serverUrl(\|HttpNetworkTransport' sources/
+
+# Operations (queries / mutations / subscriptions)
+grep -rn '\.query(\s*[A-Z]\|\.mutation(\s*[A-Z]\|\.subscription(\s*[A-Z]' sources/
+```
+
+Apollo generates one class per operation under a generated package; once you
+find the GraphQL endpoint URL via `ApolloClient.serverUrl("...")`, use the
+operation classes themselves as the API documentation — each carries its
+GraphQL document text in `OPERATION_DOCUMENT`.
+
 ## Volley
 
 ```bash

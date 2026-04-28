@@ -14,6 +14,8 @@ Arguments:
 Options:
   --retrofit      Search only for Retrofit annotations
   --okhttp        Search only for OkHttp patterns
+  --ktor          Search only for Ktor client patterns
+  --apollo        Search only for Apollo (GraphQL) patterns
   --volley        Search only for Volley patterns
   --urls          Search only for hardcoded URLs
   --auth          Search only for auth-related patterns
@@ -29,6 +31,8 @@ EOF
 SOURCE_DIR=""
 SEARCH_RETROFIT=false
 SEARCH_OKHTTP=false
+SEARCH_KTOR=false
+SEARCH_APOLLO=false
 SEARCH_VOLLEY=false
 SEARCH_URLS=false
 SEARCH_AUTH=false
@@ -38,6 +42,8 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     --retrofit) SEARCH_RETROFIT=true; SEARCH_ALL=false; shift ;;
     --okhttp)   SEARCH_OKHTTP=true;   SEARCH_ALL=false; shift ;;
+    --ktor)     SEARCH_KTOR=true;     SEARCH_ALL=false; shift ;;
+    --apollo)   SEARCH_APOLLO=true;   SEARCH_ALL=false; shift ;;
     --volley)   SEARCH_VOLLEY=true;    SEARCH_ALL=false; shift ;;
     --urls)     SEARCH_URLS=true;      SEARCH_ALL=false; shift ;;
     --auth)     SEARCH_AUTH=true;      SEARCH_ALL=false; shift ;;
@@ -88,6 +94,27 @@ if [[ "$SEARCH_ALL" == true || "$SEARCH_OKHTTP" == true ]]; then
   run_grep '(Request\.Builder|HttpUrl|\.newCall|\.enqueue|addInterceptor|addNetworkInterceptor)'
   section "OkHttp URL Construction"
   run_grep '(\.url\s*\(|\.addQueryParameter|\.addPathSegment|\.scheme\s*\(|\.host\s*\()'
+fi
+
+# --- Ktor (Kotlin) ---
+# Ktor doesn't use annotations. Endpoints appear as string args to
+# client.get/post/etc., or are built via HttpRequestBuilder.url(...). Auth
+# is configured via the bearer { loadTokens / refreshTokens } DSL.
+if [[ "$SEARCH_ALL" == true || "$SEARCH_KTOR" == true ]]; then
+  section "Ktor — Client Calls"
+  run_grep '\b(client|httpClient|HttpClient)\.(get|post|put|delete|patch|head|request)\s*[<(]'
+  section "Ktor — Request Building / Default Request"
+  run_grep '(HttpRequestBuilder|defaultRequest\s*\{|\burl\s*\(\s*"|URLBuilder|URLProtocol)'
+  section "Ktor — Auth Plugin (Bearer / Refresh)"
+  run_grep '(\bbearer\s*\{|BearerTokens\s*\(|loadTokens\s*\{|refreshTokens\s*\{|\bAuth\s*\)\s*\{)'
+fi
+
+# --- Apollo (GraphQL) ---
+if [[ "$SEARCH_ALL" == true || "$SEARCH_APOLLO" == true ]]; then
+  section "Apollo — GraphQL Client"
+  run_grep '(ApolloClient|\.serverUrl\s*\(|\.subscriptionNetworkTransport|HttpNetworkTransport)'
+  section "Apollo — Operations"
+  run_grep '(\.query\s*\(\s*[A-Z]|\.mutation\s*\(\s*[A-Z]|\.subscription\s*\(\s*[A-Z])'
 fi
 
 # --- Volley ---
