@@ -230,8 +230,35 @@ if [[ "$SEARCH_ALL" == true || "$SEARCH_URLS" == true ]]; then
 
   TMP="$(mktemp)"
   trap 'rm -f "$TMP"' EXIT
+  # Extraction (STRICT_URL) is deliberately permissive; this awk pass drops the
+  # residual Kotlin-stdlib dictionary noise WITHOUT losing the high-signal
+  # shapes a strict-only regex discards (IPs, apex domains, internal hosts).
+  # Decision table, top-down, on the host (authority before any :port / /path):
+  #   * IPv4 literal                    -> keep  (dict fragments are words,
+  #                                              never dotted-quads)
+  #   * >=3 labels (sub.domain.tld)     -> keep  (any TLD; same tolerance the
+  #                                              original strict regex had)
+  #   * any host WITH a :port or /path  -> keep  (structured = high signal:
+  #                                              localhost:3000, svc/health)
+  #   * bare 2-label apex, no port/path -> keep ONLY if the TLD is a real one,
+  #                                              compared as a whole field (kills
+  #                                              "www.this" / "this.introduction",
+  #                                              keeps "mytrackera-api.com")
+  # Trade-off: a first-party host referenced bare with an uncommon TLD (e.g.
+  # https://foo.store with no path) is dropped — give it a path/port, or add the
+  # TLD to the list below, if you hit that case.
   { grep -rhoE --include='*.java' --include='*.kt' "$STRICT_URL" "$SOURCE_DIR" 2>/dev/null || true; } \
-      | sort -u > "$TMP"
+      | sort -u \
+      | awk '
+          { rest=$0; sub(/^https?:\/\//,"",rest)
+            host=rest; sub(/[/:].*/,"",host)
+            haspathport = (rest ~ /[/:]/)
+            if (host ~ /^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$/) { print; next }   # IPv4
+            n = split(host, a, ".")
+            if (n >= 3)      { print; next }                                 # sub.domain.tld
+            if (haspathport) { print; next }                                 # has :port or /path
+            if (n == 2 && a[2] ~ /^(com|net|org|io|co|app|dev|me|ai|xyz|info|biz|gov|edu|mil|int|tech|cloud|uk|de|fr|it|es|nl|in|us|ca|au|jp|cn|br|ru|eu|ch|se|no|fi|dk|pl|pt|gr|ie|be|at|cz|sg|hk|kr|tw|mx|ar|cl|za|nz)$/) print  # real apex TLD
+          }' > "$TMP"
 
   # Extract host: strip scheme, take part up to first ':' or '/'.
   HOSTS_TMP="$(mktemp)"
