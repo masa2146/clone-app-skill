@@ -54,10 +54,10 @@ Run, in order, reading each output before the next:
 2. `bash "$RE/check-deps.sh"` — parse `INSTALL_REQUIRED:` / `INSTALL_OPTIONAL:` lines.
    Install required deps with `bash "$RE/install-dep.sh" <dep>`; re-run check-deps until clean.
    Ask the user before installing optional deps (vineflower, dex2jar).
-3. `bash "$RE/decompile.sh" "$APK"` (add `--deobf` if fingerprint showed heavy obfuscation).
-   Output lands under the RE script's `output/` — note the `sources/` path it prints.
-4. If the app is Kotlin: `bash "$RE/recover-kotlin-names.sh" <sources> "$WORK/output/names/"`.
-5. `bash "$RE/find-api-calls.sh" <sources>` (full scan; add `--ktor`/`--apollo`/`--paths` as
+3. `bash "$RE/decompile.sh" -o "$WORK/output" "$APK"` (add `--deobf` if fingerprint showed heavy obfuscation: `bash "$RE/decompile.sh" -o "$WORK/output" --deobf "$APK"`).
+   Sources land at `$WORK/output/sources/`.
+4. If the app is Kotlin: `bash "$RE/recover-kotlin-names.sh" "$WORK/output/sources" "$WORK/output/names/"`.
+5. `bash "$RE/find-api-calls.sh" "$WORK/output/sources"` (full scan; add `--ktor`/`--apollo`/`--paths` as
    the fingerprint suggests).
 
 From these outputs assemble: framework, HTTP stack, **API endpoint list**,
