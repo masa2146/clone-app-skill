@@ -1,0 +1,13 @@
+{
+  "resultCount": 1,
+  "results": [
+    {
+      "trackName": "Example App",
+      "sellerName": "Example Studio",
+      "averageUserRating": 4.5,
+      "userRatingCount": 8421,
+      "formattedPrice": "Free",
+      "trackViewUrl": "https://apps.apple.com/app/id123456789"
+    }
+  ]
+}
