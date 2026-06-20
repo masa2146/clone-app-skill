@@ -8,7 +8,7 @@ if [[ -z "$input" ]]; then
 fi
 
 # Case 1: full URL containing id=<package>
-if [[ "$input" =~ id=([a-zA-Z0-9._]+) ]]; then
+if [[ "$input" =~ id=([a-zA-Z0-9_]+(\.[a-zA-Z0-9_]+)+) ]]; then
   echo "${BASH_REMATCH[1]}"
   exit 0
 fi
