@@ -1,0 +1,13 @@
+{
+  "name": "clone-app",
+  "version": "0.1.0",
+  "description": "Analyze a Google Play app: download APK, reverse engineer it, estimate AI-assisted clone effort and infra cost, assess market viability, and optionally generate an implementation plan.",
+  "author": {
+    "name": "masa2146"
+  },
+  "repository": "https://github.com/masa2146/android-reverse-engineering-skill",
+  "license": "Apache-2.0",
+  "keywords": ["android", "clone", "feasibility", "effort-estimation", "market-analysis", "reverse-engineering"],
+  "skills": "./skills/",
+  "commands": "./commands/"
+}
