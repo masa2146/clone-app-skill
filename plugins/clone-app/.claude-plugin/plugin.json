@@ -5,7 +5,7 @@
   "author": {
     "name": "masa2146"
   },
-  "repository": "https://github.com/masa2146/android-reverse-engineering-skill",
+  "repository": "https://github.com/masa2146/clone-app-skill",
   "license": "Apache-2.0",
   "keywords": ["android", "clone", "feasibility", "effort-estimation", "market-analysis", "reverse-engineering"],
   "skills": "./skills/",
