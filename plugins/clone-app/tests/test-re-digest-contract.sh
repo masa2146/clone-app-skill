@@ -45,4 +45,18 @@ for e in d['endpoints']:
 print('PASS: payload fixture shape valid')
 " || { echo "FAIL: payload fixture shape"; fail=1; }
 
+# --- SKILL.md Phase 2 wiring (Task 2) ---
+SKILL="$P/skills/clone-app/SKILL.md"
+hasS() { grep -qF "$1" "$SKILL" && echo "PASS: SKILL $2" || { echo "FAIL: SKILL $2 — '$1' missing"; fail=1; }; }
+hasReS() { grep -qE "$1" "$SKILL" && echo "PASS: SKILL $2" || { echo "FAIL: SKILL $2 — /$1/ missing"; fail=1; }; }
+
+hasS "re-digest-contract.md" "Phase 2 points at the digest contract"
+hasReS "subagent|Agent tool|dispatch" "Phase 2 dispatches a subagent"
+hasS "android-reverse-engineering skill" "Phase 2 names the RE skill branch"
+hasS "direct-scripts" "Phase 2 names the script-fallback branch"
+hasS "re-summary.txt" "Phase 2c consumes the summary"
+hasS "payloads.json" "Phase 5 consumes payloads.json"
+hasS "Backend API Surface" "Phase 6 adds the Backend API Surface section"
+hasS "RE subagent" "error table covers subagent failure"
+
 exit $fail
