@@ -1,0 +1,5 @@
+[
+  { "name": "Puzzle Quest Saga", "package": "com.casual.puzzlequest", "category": "Games" },
+  { "name": "habit tracker PRO", "category": "Productivity" },
+  { "name": "Budget Buddy", "package": "com.fintech.budgetbuddy", "category": "Finance" }
+]
