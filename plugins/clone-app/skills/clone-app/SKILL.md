@@ -34,11 +34,13 @@ Create the working dir: `WORK="./work/$PKG"` and `mkdir -p "$WORK"`.
 ```bash
 APK="$(bash ${CLAUDE_PLUGIN_ROOT}/skills/clone-app/scripts/download-apk.sh "$PKG" "$WORK")"
 ```
-The script downloads from APKCombo (the old APKPure direct endpoint is now behind
-a Cloudflare bot challenge), retries 3×, and prints the path (`app.apk` or
-`app.xapk`). If it exits non-zero, the app may not be on APKCombo or the page
-format changed — tell the user the download failed and ask for a local APK/XAPK
-path; set `APK` to that path.
+The script downloads via `apkeep` (default source `apk-pure`; no auth, no
+JavaScript, handles XAPK split bundling) and prints the path (`app.apk` or
+`app.xapk`). It needs the `apkeep` binary on PATH — install with
+`brew install apkeep` (or `cargo install apkeep`). If it exits non-zero,
+`apkeep` may be missing or the app isn't on that source (try another with
+`CLONE_APP_APKEEP_SOURCE=apk-combo`) — tell the user the download failed and
+ask for a local APK/XAPK path; set `APK` to that path.
 
 ## Phase 2: Reverse Engineering (probe → dispatch → consume)
 

@@ -6,62 +6,54 @@ check() { [[ "$2" == "$3" ]] && echo "PASS: $1" || { echo "FAIL: $1 — expected
 
 tmp="$(mktemp -d)"
 
-# Find the --output target in a curl arg list, and the request URL (http... arg).
-# Shared helper sourced by the stubs below.
-cat > "$tmp/argparse.sh" <<'EOF'
-out=""; url=""; prev=""
+# Stub apkeep modelling the real CLI:
+#   apkeep -a <package> -d <source> <out_dir>
+# parse out the package and the out_dir (last arg), then drop an artifact there.
+# CLONE_APP_FAKE_EXT picks which extension the stub produces; "fail" makes it
+# exit non-zero without writing anything.
+cat > "$tmp/fakeapkeep.sh" <<'EOF'
+#!/usr/bin/env bash
+pkg=""; outdir=""; prev=""
 for a in "$@"; do
-  [[ "$prev" == "--output" || "$prev" == "-o" ]] && out="$a"
-  [[ "$a" == http*://* ]] && url="$a"
+  [[ "$prev" == "-a" || "$prev" == "--app" ]] && pkg="$a"
+  outdir="$a"   # last positional wins; apkeep takes OUTPATH last
   prev="$a"
 done
+case "$CLONE_APP_FAKE_EXT" in
+  fail) exit 1 ;;
+  xapk)
+    workdir="$(mktemp -d)"
+    echo '{}' > "$workdir/manifest.json"
+    echo 'a' > "$workdir/base.apk"; echo 'b' > "$workdir/config.apk"
+    ( cd "$workdir" && zip -q -r "$outdir/$pkg.xapk" . ) ;;
+  *) echo 'apk-bytes' > "$outdir/$pkg.apk" ;;
+esac
+exit 0
 EOF
+chmod +x "$tmp/fakeapkeep.sh"
 
-# Stub curl modelling the real two-step APKCombo flow:
-#  call 1 (URL contains /download/apk) -> emit HTML page with an /r2?u= link
-#  call 2 (URL contains /r2?u=)        -> emit a zip (manifest.json + 2 apk) => xapk
-cat > "$tmp/fakecurl-xapk.sh" <<EOF
-#!/usr/bin/env bash
-source "$tmp/argparse.sh"
-if [[ "\$url" == *"/download/apk"* ]]; then
-  printf '%s' '<a href="/r2?u=https%3A%2F%2Fexample%2Ftest.xapk">Download</a>' > "\$out"
-  exit 0
-elif [[ "\$url" == *"/r2?u="* ]]; then
-  workdir="\$(mktemp -d)"
-  echo '{}' > "\$workdir/manifest.json"
-  echo 'a' > "\$workdir/base.apk"; echo 'b' > "\$workdir/config.apk"
-  ( cd "\$workdir" && zip -q -r "\$out" . )
-  exit 0
-fi
-exit 1
-EOF
-chmod +x "$tmp/fakecurl-xapk.sh"
-
-path="$(CLONE_APP_CURL="$tmp/fakecurl-xapk.sh" bash "$SCRIPT" com.example.app "$tmp/out" 2>/dev/null)"; rc=$?
+# XAPK case
+path="$(CLONE_APP_APKEEP="$tmp/fakeapkeep.sh" CLONE_APP_FAKE_EXT=xapk \
+  bash "$SCRIPT" com.example.app "$tmp/out" 2>/dev/null)"; rc=$?
 check "xapk exit 0" "0" "$rc"
 check "xapk extension" "xapk" "${path##*.}"
+check "xapk renamed to app.*" "app.xapk" "$(basename "$path")"
 
-# Stub where the download page loads but contains NO /r2 link -> exit 1
-cat > "$tmp/fakecurl-nolink.sh" <<EOF
-#!/usr/bin/env bash
-source "$tmp/argparse.sh"
-if [[ "\$url" == *"/download/apk"* ]]; then
-  printf '%s' '<html>no link here</html>' > "\$out"; exit 0
-fi
-exit 1
-EOF
-chmod +x "$tmp/fakecurl-nolink.sh"
-out2="$(CLONE_APP_CURL="$tmp/fakecurl-nolink.sh" bash "$SCRIPT" com.example.app "$tmp/out2" 2>/dev/null)"; rc2=$?
-check "no-link exit 1" "1" "$rc2"
+# APK case
+path2="$(CLONE_APP_APKEEP="$tmp/fakeapkeep.sh" CLONE_APP_FAKE_EXT=apk \
+  bash "$SCRIPT" com.example.app "$tmp/out-apk" 2>/dev/null)"; rc2=$?
+check "apk exit 0" "0" "$rc2"
+check "apk extension" "apk" "${path2##*.}"
 
-# Stub curl that always fails -> exit 1 after retries
-cat > "$tmp/fakecurl-fail.sh" <<'EOF'
-#!/usr/bin/env bash
-exit 22
-EOF
-chmod +x "$tmp/fakecurl-fail.sh"
-out3="$(CLONE_APP_CURL="$tmp/fakecurl-fail.sh" bash "$SCRIPT" com.example.app "$tmp/out3" 2>/dev/null)"; rc3=$?
+# apkeep failure -> exit 1
+out3="$(CLONE_APP_APKEEP="$tmp/fakeapkeep.sh" CLONE_APP_FAKE_EXT=fail \
+  bash "$SCRIPT" com.example.app "$tmp/out3" 2>/dev/null)"; rc3=$?
 check "fail exit 1" "1" "$rc3"
+
+# apkeep binary missing -> exit 1
+out4="$(CLONE_APP_APKEEP="$tmp/does-not-exist-apkeep" \
+  bash "$SCRIPT" com.example.app "$tmp/out4" 2>/dev/null)"; rc4=$?
+check "missing-binary exit 1" "1" "$rc4"
 
 rm -rf "$tmp"
 exit $fail
