@@ -23,6 +23,7 @@ def main():
     check("developer", d["developer"] == "Example Studio")
     check("category", d["category"] == "GAME_PUZZLE")
     check("installs", d["installs"] == "1,000,000+")
+    check("updated", d["updated"] == "Jun 1, 2026")
     check("source", d["source"] == "google-play")
     # all expected keys present even if null
     for k in ["package","title","rating","rating_count","installs","category","developer","updated","source"]:
