@@ -97,7 +97,8 @@ instructions:
    **never** raw decompiled sources.
 
 If the subagent fails, retry once; if it still fails and the **direct-scripts**
-branch is available, re-dispatch on that branch; otherwise stop and report.
+branch is available (i.e. the Phase 2a probe returned `RC == 0`), re-dispatch on
+that branch; otherwise stop and report.
 
 ### Phase 2c — Consume
 
