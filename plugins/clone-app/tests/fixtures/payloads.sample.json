@@ -1,0 +1,27 @@
+{
+  "package": "com.example.app",
+  "re_method": "re-skill",
+  "endpoints": [
+    {
+      "host": "api.example.com",
+      "method": "POST",
+      "path": "/v1/auth/login",
+      "auth": "none",
+      "source": "com/example/api/AuthApi.java",
+      "request_body": { "email": "string", "password": "string" },
+      "response": { "token": "string", "user": {} },
+      "headers": { "Content-Type": "application/json" }
+    },
+    {
+      "host": "api.example.com",
+      "method": "GET",
+      "path": "/v1/users/profile",
+      "auth": "Bearer",
+      "source": "com/example/api/UserApi.java",
+      "request_body": null,
+      "response": null,
+      "headers": { "Authorization": "Bearer <token>" }
+    }
+  ],
+  "buildconfig": { "BASE_URL": "https://api.example.com/v1" }
+}

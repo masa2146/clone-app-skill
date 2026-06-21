@@ -16,7 +16,7 @@ done
 for s in scrape-play-store.py check-appstore.py; do
   must_exist "$P/skills/clone-app/scripts/$s"
 done
-for r in stack-recommendation-guide effort-estimation-guide infra-cost-guide report-template; do
+for r in stack-recommendation-guide effort-estimation-guide infra-cost-guide report-template re-digest-contract; do
   must_exist "$P/skills/clone-app/references/$r.md"
 done
 
