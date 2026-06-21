@@ -10,6 +10,15 @@ NO GO), and — if you approve — generates a full implementation plan.
 - The `android-reverse-engineering` plugin (ships in this same repo).
 - Java JDK 17+ and jadx (the RE plugin auto-installs jadx if missing).
 - `curl`, Python 3 (stdlib only), `unzip`.
+- **bash 4+**. macOS ships bash 3.2, but the RE scripts use bash-4 syntax
+  (`${VAR,,}`) and fail with "bad substitution" on 3.2. Install a modern bash
+  with `brew install bash` — `#!/usr/bin/env bash` then picks it up.
+
+## APK source
+APKs/XAPKs are fetched from **APKCombo**. The previous APKPure direct endpoint
+(`d.apkpure.com/b/APK/<pkg>`) now returns an HTTP 403 Cloudflare bot challenge
+for every package, so it is no longer usable from a plain `curl`. If an app is
+not on APKCombo, pass a local `.apk`/`.xapk` path instead.
 
 ## Install
 ```text

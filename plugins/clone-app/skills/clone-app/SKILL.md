@@ -34,9 +34,11 @@ Create the working dir: `WORK="./work/$PKG"` and `mkdir -p "$WORK"`.
 ```bash
 APK="$(bash ${CLAUDE_PLUGIN_ROOT}/skills/clone-app/scripts/download-apk.sh "$PKG" "$WORK")"
 ```
-The script retries 3× and prints the path (`app.apk` or `app.xapk`). If it exits
-non-zero, tell the user the download failed and ask for a local APK/XAPK path;
-set `APK` to that path.
+The script downloads from APKCombo (the old APKPure direct endpoint is now behind
+a Cloudflare bot challenge), retries 3×, and prints the path (`app.apk` or
+`app.xapk`). If it exits non-zero, the app may not be on APKCombo or the page
+format changed — tell the user the download failed and ask for a local APK/XAPK
+path; set `APK` to that path.
 
 ## Phase 2: Reverse Engineering
 
@@ -44,7 +46,10 @@ Resolve the sibling RE scripts:
 ```bash
 RE="$(bash ${CLAUDE_PLUGIN_ROOT}/skills/clone-app/scripts/resolve-re-scripts.sh)"
 ```
-If it exits non-zero, show its error (RE plugin not installed) and stop.
+If it exits non-zero, show its error (RE plugin not installed) and stop. If it
+prints a `WARNING:` about bash version, the RE scripts need **bash 4+** (macOS
+ships 3.2; their `${VAR,,}` syntax fails as "bad substitution" otherwise) —
+install one with `brew install bash` before continuing, then re-run Phase 2.
 
 Run, in order, reading each output before the next:
 1. `bash "$RE/fingerprint.sh" "$APK"` — framework, HTTP stack, obfuscation, SDKs, native libs.
