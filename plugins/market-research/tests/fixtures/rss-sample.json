@@ -1,0 +1,20 @@
+{
+  "feed": {
+    "entry": [
+      {
+        "im:name": { "label": "Puzzle Quest Saga" },
+        "im:artist": { "label": "Casual Studio" },
+        "category": { "attributes": { "label": "Games", "im:id": "6014" } },
+        "id": { "attributes": { "im:id": "1111111111", "im:bundleId": "com.casual.puzzlequest" } },
+        "im:price": { "attributes": { "amount": "0.00000", "currency": "USD" } }
+      },
+      {
+        "im:name": { "label": "Budget Buddy" },
+        "im:artist": { "label": "Fintech Labs" },
+        "category": { "attributes": { "label": "Finance", "im:id": "6015" } },
+        "id": { "attributes": { "im:id": "2222222222", "im:bundleId": "com.fintech.budgetbuddy" } },
+        "im:price": { "attributes": { "amount": "0.00000", "currency": "USD" } }
+      }
+    ]
+  }
+}
