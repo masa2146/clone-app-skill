@@ -40,35 +40,72 @@ a Cloudflare bot challenge), retries 3×, and prints the path (`app.apk` or
 format changed — tell the user the download failed and ask for a local APK/XAPK
 path; set `APK` to that path.
 
-## Phase 2: Reverse Engineering
+## Phase 2: Reverse Engineering (probe → dispatch → consume)
 
-Resolve the sibling RE scripts:
+RE runs inside an **isolated subagent** so the decompiled sources never flood
+this orchestrator's context. The subagent prefers the
+`android-reverse-engineering` **skill** and falls back to that plugin's bash
+**scripts**. Either way it writes the same digest files to `$WORK/`, defined
+in `${CLAUDE_PLUGIN_ROOT}/skills/clone-app/references/re-digest-contract.md`.
+
+### Phase 2a — Probe
+
 ```bash
-RE="$(bash ${CLAUDE_PLUGIN_ROOT}/skills/clone-app/scripts/resolve-re-scripts.sh)"
+RE="$(bash ${CLAUDE_PLUGIN_ROOT}/skills/clone-app/scripts/resolve-re-scripts.sh 2>/tmp/re-err)"; RC=$?
 ```
-If it exits non-zero, show its error (RE plugin not installed) and stop. If it
-prints a `WARNING:` about bash version, the RE scripts need **bash 4+** (macOS
-ships 3.2; their `${VAR,,}` syntax fails as "bad substitution" otherwise) —
-install one with `brew install bash` before continuing, then re-run Phase 2.
+- `RC == 0` → the RE **scripts** are on disk (fallback is available). If it
+  printed a `WARNING:` about bash version, the scripts need **bash 4+**
+  (macOS ships 3.2; `${VAR,,}` fails as "bad substitution") — install one with
+  `brew install bash` before the script-fallback branch can succeed.
+- Check your own available-skills list for `android-reverse-engineering` →
+  is the RE **skill** registered?
 
-Run, in order, reading each output before the next:
-1. `bash "$RE/fingerprint.sh" "$APK"` — framework, HTTP stack, obfuscation, SDKs, native libs.
-   - **If framework is Flutter / React Native / Cordova / Xamarin:** tell the user Java
-     decompilation is limited; proceed but rely on manifest + strings + hardcoded URLs +
-     the fingerprint SDK list. Skip steps 3-5's deep API extraction expectations.
-2. `bash "$RE/check-deps.sh"` — parse `INSTALL_REQUIRED:` / `INSTALL_OPTIONAL:` lines.
-   Install required deps with `bash "$RE/install-dep.sh" <dep>`; re-run check-deps until clean.
-   Ask the user before installing optional deps (vineflower, dex2jar).
-3. `bash "$RE/decompile.sh" -o "$WORK/output" "$APK"` (add `--deobf` if fingerprint showed heavy obfuscation: `bash "$RE/decompile.sh" -o "$WORK/output" --deobf "$APK"`).
-   Sources land at `$WORK/output/sources/`.
-4. If the app is Kotlin: `bash "$RE/recover-kotlin-names.sh" "$WORK/output/sources" "$WORK/output/names/"`.
-5. `bash "$RE/find-api-calls.sh" "$WORK/output/sources"` (full scan; add `--ktor`/`--apollo`/`--paths` as
-   the fingerprint suggests).
+Pick the branch:
 
-From these outputs assemble: framework, HTTP stack, **API endpoint list**,
-first-party vs third-party hosts, AndroidManifest summary (permissions, components),
-and a **feature list** (screen count, SDKs, backend signals). Keep this in context
-for later phases.
+| RE skill registered | RE scripts on disk (`RC`) | Branch |
+|---|---|---|
+| yes | any | **re-skill** |
+| no | 0 | **direct-scripts** |
+| no | 1 | **stop** — show the `/tmp/re-err` resolver error and halt |
+
+### Phase 2b — Dispatch the subagent
+
+Dispatch one subagent (Agent tool, `general-purpose` type — it can both invoke
+skills and run bash). Pass it: `$PKG`, `$APK`, `$WORK`, the chosen **branch**,
+the resolved `$RE` scripts dir, and the path to `re-digest-contract.md`. Its
+instructions:
+
+1. **Run RE per branch.**
+   - **re-skill:** invoke the android-reverse-engineering skill on `$APK`,
+     output dir `$WORK/output` — run its full workflow (fingerprint, deps,
+     decompile, Kotlin-name recovery if Kotlin, API extraction incl. Tier-2).
+   - **direct-scripts:** run, in order, reading each output before the next:
+     `bash "$RE/fingerprint.sh" "$APK"`, `bash "$RE/check-deps.sh"`
+     (install required deps via `bash "$RE/install-dep.sh" <dep>`; ask before
+     optional vineflower/dex2jar), `bash "$RE/decompile.sh" -o "$WORK/output" "$APK"`
+     (add `--deobf` if obfuscation is heavy), `bash "$RE/recover-kotlin-names.sh"
+     "$WORK/output/sources" "$WORK/output/names/"` if Kotlin, then
+     `bash "$RE/find-api-calls.sh" "$WORK/output/sources"`.
+2. **Framework guard:** if the fingerprint is Flutter / React Native / Cordova
+   / Xamarin, Java decompile is shallow — produce a partial digest, set
+   `RE Method: limited: <framework>`, payloads may be empty.
+3. **Extract** the Tier-1 endpoint inventory and Tier-2 payloads for **auth,
+   payment/checkout, and the 1–2 core feature endpoints** (not every endpoint).
+4. **Write** `$WORK/re-digest.md`, `$WORK/payloads.json`, `$WORK/re-summary.txt`
+   exactly per `re-digest-contract.md`.
+5. **Return** the contents of `$WORK/re-summary.txt` plus the two file paths —
+   **never** raw decompiled sources.
+
+If the subagent fails, retry once; if it still fails and the **direct-scripts**
+branch is available, re-dispatch on that branch; otherwise stop and report.
+
+### Phase 2c — Consume
+
+Read `$WORK/re-summary.txt` (the only RE text in this context). From it you have:
+framework, HTTP stack, host counts, endpoint count, key-flow names, secrets
+count, and the RE method. Read `$WORK/re-digest.md` or `$WORK/payloads.json`
+**on demand** when a later phase needs detail. Keep the summary in context for
+Phases 3–7.
 
 ## Phase 3: Store Analysis
 
@@ -94,7 +131,10 @@ the user to choose. **Wait for the user's choice before Phase 5.** Lock it.
 
 Read `${CLAUDE_PLUGIN_ROOT}/skills/clone-app/references/effort-estimation-guide.md`
 and `infra-cost-guide.md`. Build:
-- the feature list → AI-Sprint effort table (min-max total, uncertainty band),
+- read `$WORK/payloads.json`; the endpoint count and the payload complexity of
+  the key flows size the backend work,
+- the feature list + backend surface → AI-Sprint effort table (min-max total,
+  uncertainty band; widen the band when RE Method is `limited:`),
 - the MVP/Growth/Scale monthly infra cost table.
 Base both on the **user-selected stack** from Phase 4.
 
@@ -104,6 +144,10 @@ Read `${CLAUDE_PLUGIN_ROOT}/skills/clone-app/references/report-template.md`.
 Fill every section from the data gathered. For market analysis (competitors,
 market size), use web search as needed. Produce a GO / CONDITIONAL GO / NO GO
 verdict tying effort + cost against market opportunity.
+Include a **Backend API Surface** section: summarize the Tier-1 inventory from
+`$WORK/re-digest.md` and the key-flow payloads from `$WORK/payloads.json` (host
+list, endpoint count, auth model, and the auth/payment/core request+response
+shapes). If RE Method was `limited:`, say so and note the reduced confidence.
 
 Write the report:
 ```
@@ -124,7 +168,9 @@ implementation plan?"
 |---|---|
 | Package not in URL | ask user for package name |
 | Download fails 3× | ask for local APK path |
-| RE plugin missing | show resolver error, stop |
+| RE skill + scripts both missing | show resolver error, stop |
+| RE subagent fails | retry once, then fall back to direct-scripts branch; else stop |
+| Subagent returned no digest files | re-dispatch once; if still missing, stop and report |
 | Flutter/RN/Cordova/Xamarin | warn, continue with limited RE |
 | App Store not found | continue Google Play only |
 | Play scrape returns nulls | web-search fallback, note source |
