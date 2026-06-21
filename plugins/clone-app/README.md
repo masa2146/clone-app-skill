@@ -13,9 +13,9 @@ NO GO), and — if you approve — generates a full implementation plan.
 
 ## Install
 ```text
-/plugin marketplace add /path/to/this/repo
-/plugin install android-reverse-engineering@android-reverse-engineering-skill
-/plugin install clone-app@android-reverse-engineering-skill
+/plugin marketplace add https://github.com/masa2146/clone-app-skill
+/plugin install android-reverse-engineering@clone-app-skill
+/plugin install clone-app@clone-app-skill
 ```
 
 ## Usage

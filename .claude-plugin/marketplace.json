@@ -1,12 +1,12 @@
 {
   "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
-  "name": "android-reverse-engineering-skill",
-  "description": "Claude Code plugins for Android reverse engineering",
+  "name": "clone-app-skill",
+  "description": "Claude Code plugins: Android reverse engineering plus clone-feasibility analysis",
   "owner": {
-    "name": "Simone Avogadro"
+    "name": "masa2146"
   },
   "metadata": {
-    "description": "Claude Code plugins for Android reverse engineering",
+    "description": "Claude Code plugins: Android reverse engineering plus clone-feasibility analysis",
     "version": "1.5.0"
   },
   "plugins": [
@@ -31,7 +31,7 @@
       "author": {
         "name": "masa2146"
       },
-      "repository": "https://github.com/masa2146/android-reverse-engineering-skill",
+      "repository": "https://github.com/masa2146/clone-app-skill",
       "license": "Apache-2.0",
       "keywords": ["android", "clone", "feasibility", "effort-estimation", "market-analysis"],
       "category": "security"
