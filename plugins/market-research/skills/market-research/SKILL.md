@@ -9,7 +9,7 @@ Scan the app/game market with free sources, score candidates, and hand the ones
 you pick to the `clone-app` skill. Every run rotates its search angles and
 excludes everything suggested before, so results stay fresh.
 
-This skill orchestrates 6 phases (0–5). Deterministic steps are factored into
+This skill orchestrates 8 phases (0–7). Deterministic steps are factored into
 helper scripts under `${CLAUDE_PLUGIN_ROOT}/skills/market-research/scripts/`;
 AI-judgment steps follow rubrics under `.../references/`.
 
