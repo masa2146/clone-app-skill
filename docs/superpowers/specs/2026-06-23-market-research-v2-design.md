@@ -77,8 +77,8 @@ helper scripts; judgment steps follow reference rubrics.
 
 **`numeric-sources.md`** — for each free numeric source: what it's good for, the
 exact WebSearch query shape to use, which number to extract, and how to cite it.
-Covers Google Trends, AppBrain, Statista, Sensor Tower blog, data.ai, SimilarWeb
-free tier. This is the rubric that turns "go search the web" into "pull these
+Covers Google Trends, play.google.com (installs/rating), Statista, Sensor Tower
+blog, data.ai, SimilarWeb free tier. This is the rubric that turns "go search the web" into "pull these
 specific numbers from these specific places."
 
 ### Rewritten references
