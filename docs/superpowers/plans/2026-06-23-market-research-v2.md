@@ -4,7 +4,7 @@
 
 **Goal:** Upgrade the `market-research` skill to produce numerically-grounded, source-cited clone candidates that each carry 1–2 verified Google Play Store links — all free, no API keys.
 
-**Architecture:** Add three deterministic scraper scripts (AppBrain Play charts, a Play resolver/saturation tool, a best-effort Google Trends fetcher) plus a curated numeric-sources rubric. Rewrite the scoring guide to require numeric evidence, the report template to carry Play links + citations + saturation, and the SKILL orchestrator to a survivor-only-enrichment phase flow. Each scraper is fixture-tested offline; reality is confirmed by a one-time live-fetch validation step.
+**Architecture:** Add three deterministic scraper scripts (play.google.com top/category charts, a Play resolver/saturation tool, a best-effort Google Trends fetcher) plus a curated numeric-sources rubric. Rewrite the scoring guide to require numeric evidence, the report template to carry Play links + citations + saturation, and the SKILL orchestrator to a survivor-only-enrichment phase flow. Each scraper is fixture-tested offline; reality is confirmed by a one-time live-fetch validation step.
 
 **Tech Stack:** Python 3 stdlib only (`urllib`, `json`, `re`, `subprocess`/`curl` SSL fallback), bash 4+, Markdown skill/reference docs.
 
@@ -26,14 +26,14 @@
 ## File Structure
 
 **Create:**
-- `plugins/market-research/skills/market-research/scripts/fetch-play-charts.py` — AppBrain HTML top-charts → normalized JSON (real Android packages).
+- `plugins/market-research/skills/market-research/scripts/fetch-play-charts.py` — play.google.com top/category HTML → normalized JSON (real Android packages).
 - `plugins/market-research/skills/market-research/scripts/play.py` — `resolve` (name → Play URL + stats) and `count` (saturation) subcommands.
 - `plugins/market-research/skills/market-research/scripts/trends.py` — best-effort Google Trends, never hard-fails.
 - `plugins/market-research/skills/market-research/references/numeric-sources.md` — curated free numeric-data sources + query/extraction rubric.
 - `plugins/market-research/tests/test-fetch-play-charts.py`
 - `plugins/market-research/tests/test-play.py`
 - `plugins/market-research/tests/test-trends.py`
-- `plugins/market-research/tests/fixtures/appbrain-popular.html`
+- `plugins/market-research/tests/fixtures/play-chart.html`
 - `plugins/market-research/tests/fixtures/play-search.html`
 - `plugins/market-research/tests/fixtures/play-details.html`
 - `plugins/market-research/tests/fixtures/trends-sample.json`
@@ -51,38 +51,31 @@
 
 ---
 
-## Task 1: AppBrain Play charts scraper
+## Task 1: play.google.com charts scraper
+
+**Context:** AppBrain (the brainstorm's first choice) is Cloudflare-blocked (HTTP 403) for free scraping. `play.google.com`'s own server-rendered chart HTML works (validated live: 46/46 real Android packages from a category page). This scrapes `/store/apps/top` and `/store/apps/category/<CAT>`.
 
 **Files:**
 - Create: `plugins/market-research/skills/market-research/scripts/fetch-play-charts.py`
-- Create: `plugins/market-research/tests/fixtures/appbrain-popular.html`
+- Create: `plugins/market-research/tests/fixtures/play-chart.html`
 - Test: `plugins/market-research/tests/test-fetch-play-charts.py`
 
 **Interfaces:**
 - Consumes: nothing.
-- Produces: CLI `fetch-play-charts.py <chart> [--region R] [--limit N] [--html-file F]` where `<chart> ∈ {popular, top-grossing, top-new}`. Stdout JSON: `{"source":"appbrain","chart":str,"region":str,"count":int,"entries":[{"rank":int,"name":str,"developer":str|None,"category":str|None,"package":str,"rating":float|None,"installs":str|None}]}`.
+- Produces: CLI `fetch-play-charts.py <chart> [--category CAT] [--region R] [--limit N] [--html-file F]` where `<chart> ∈ {top, category}` (`category` requires `--category`, e.g. `PRODUCTIVITY`). Stdout JSON: `{"source":"google-play","chart":str,"region":str,"count":int,"entries":[{"rank":int,"name":str,"package":str,"rating":float|None}]}`. `chart` label is `"top"` or `"category:<CAT>"`. `rating` is best-effort (may be `None`).
 
 - [ ] **Step 1: Create the synthetic fixture**
 
-Create `plugins/market-research/tests/fixtures/appbrain-popular.html` with markup matching AppBrain's app-list rows (a link to `/app/<slug>/<package>` carrying name, developer, rating, installs):
+Create `plugins/market-research/tests/fixtures/play-chart.html` mirroring real Play app-card markup — a `details?id=` anchor wrapping the icon, then a `class="Epkrse …"` title div, then a star-rating aria-label. (Note the trailing space inside `class="Epkrse "` — that is the real markup; the parser must tolerate it. Card 3 repeats app 1's package to exercise dedup.)
 
 ```html
 <!DOCTYPE html><html><body>
-<div class="app-list">
-  <div class="app">
-    <a class="app-icon-name" href="/app/habit-tracker/com.example.habit">Habit Tracker</a>
-    <span class="developer">Focus Labs</span>
-    <span class="category">Productivity</span>
-    <span class="rating">4.6</span>
-    <span class="installs">5,000,000+</span>
-  </div>
-  <div class="app">
-    <a class="app-icon-name" href="/app/budget-buddy/com.example.budget">Budget Buddy</a>
-    <span class="developer">Money Inc</span>
-    <span class="category">Finance</span>
-    <span class="rating">4.2</span>
-    <span class="installs">1,000,000+</span>
-  </div>
+<div role="main">
+  <a href="/store/apps/details?id=com.example.habit" jslog="38003; track:click"><div class="TjRVLb"><img src="https://play-lh.googleusercontent.com/x=s256"></div><div class="Epkrse ">Habit Tracker</div></a>
+  <div aria-label="Rated 4.6 stars out of five stars"></div>
+  <a href="/store/apps/details?id=com.example.budget" jslog="38003; track:click"><div class="TjRVLb"><img src="https://play-lh.googleusercontent.com/y=s256"></div><div class="Epkrse ">Budget Buddy</div></a>
+  <div aria-label="Rated 4.2 stars out of five stars"></div>
+  <a href="/store/apps/details?id=com.example.habit" jslog="38003; track:click"><div class="Epkrse ">Habit Tracker</div></a>
 </div>
 </body></html>
 ```
@@ -97,11 +90,11 @@ import json, subprocess, sys, os
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 SCRIPT = os.path.join(HERE, "..", "skills", "market-research", "scripts", "fetch-play-charts.py")
-FIXTURE = os.path.join(HERE, "fixtures", "appbrain-popular.html")
+FIXTURE = os.path.join(HERE, "fixtures", "play-chart.html")
 
 def run():
     out = subprocess.check_output(
-        [sys.executable, SCRIPT, "popular", "--region", "us", "--html-file", FIXTURE])
+        [sys.executable, SCRIPT, "top", "--region", "US", "--html-file", FIXTURE])
     return json.loads(out)
 
 def main():
@@ -111,20 +104,19 @@ def main():
         print(f"{'PASS' if cond else 'FAIL'}: {name}")
         if not cond: fails.append(name)
 
-    check("source", d["source"] == "appbrain")
-    check("chart", d["chart"] == "popular")
-    check("count", d["count"] == 2)
+    check("source", d["source"] == "google-play")
+    check("chart", d["chart"] == "top")
+    check("region", d["region"] == "US")
+    check("count (dedup app1 repeat)", d["count"] == 2)
     e0 = d["entries"][0]
     check("rank 1", e0["rank"] == 1)
     check("name", e0["name"] == "Habit Tracker")
     check("package", e0["package"] == "com.example.habit")
-    check("developer", e0["developer"] == "Focus Labs")
-    check("category", e0["category"] == "Productivity")
     check("rating", e0["rating"] == 4.6)
-    check("installs", e0["installs"] == "5,000,000+")
-    for k in ["rank", "name", "package", "developer", "category", "rating", "installs"]:
+    for k in ["rank", "name", "package", "rating"]:
         check(f"key present: {k}", k in e0)
     check("second package", d["entries"][1]["package"] == "com.example.budget")
+    check("second name", d["entries"][1]["name"] == "Budget Buddy")
     sys.exit(1 if fails else 0)
 
 main()
@@ -141,22 +133,20 @@ Create `plugins/market-research/skills/market-research/scripts/fetch-play-charts
 
 ```python
 #!/usr/bin/env python3
-"""Fetch an AppBrain Play-store top-chart into a normalized JSON list.
+"""Fetch a play.google.com chart page into a normalized JSON list.
 
-Google Play has no public chart feed and renders via obfuscated batchexecute
-JS. AppBrain (appbrain.com) publishes server-rendered HTML top-chart pages with
-REAL Android package names. This scrapes those rows. Stdlib-only, no pip.
+Google Play has no public chart feed, but its server-rendered HTML for
+/store/apps/top and /store/apps/category/<CAT> carries ranked app cards with
+REAL Android package names (unlike Apple's RSS iOS bundle ids). Each card is an
+<a href="/store/apps/details?id=PKG"> wrapping the icon, then a
+<div class="Epkrse ">NAME</div> title, then a star aria-label. Play obfuscates
+the title class, so the package LINK (stable) is the load-bearing field; name
+and rating are best-effort. Stdlib-only, no pip.
 
-Unlike Apple's RSS (iOS bundle ids), entries here carry Android packages usable
-directly for a clone-app handoff.
+(AppBrain, the original plan's source, is Cloudflare-blocked 403 — dropped.)
 """
-import sys, json, re, argparse, urllib.request, ssl, subprocess, shutil
+import sys, json, re, html as _html, argparse, urllib.request, ssl, subprocess, shutil
 
-CHARTS = {
-    "popular": "https://www.appbrain.com/apps/popular/",
-    "top-grossing": "https://www.appbrain.com/apps/highest-grossing/",
-    "top-new": "https://www.appbrain.com/apps/new/",
-}
 UA = "Mozilla/5.0"
 
 def _http_get(url):
@@ -175,58 +165,66 @@ def _http_get(url):
             raise
         return out.stdout.decode("utf-8", "replace")
 
-# One app row: a link to /app/<slug>/<package> followed (within the same row
-# block) by developer / category / rating / installs spans.
-ROW = re.compile(
-    r'href="/app/[^"/]+/(?P<package>[\w.]+)"[^>]*>(?P<name>[^<]+)</a>'
-    r'(?P<rest>.*?)(?=href="/app/|</div>\s*</div>|$)', re.DOTALL)
-DEV = re.compile(r'class="developer"[^>]*>([^<]+)<')
-CAT = re.compile(r'class="category"[^>]*>([^<]+)<')
-RAT = re.compile(r'class="rating"[^>]*>\s*([\d.]+)\s*<')
-INST = re.compile(r'class="installs"[^>]*>\s*([\d,]+\+)\s*<')
+LINK = re.compile(r'href="/store/apps/details\?id=([a-zA-Z0-9._]+)"')
+NAME = re.compile(r'class="Epkrse[^"]*"[^>]*>([^<]+)<')
+# rating is best-effort: search-style aria-label OR a star-icon followed by a number
+RATE_ARIA = re.compile(r'aria-label="Rated\s+([\d.]+)\s+star')
+RATE_STAR = re.compile(r'>star</[^>]+>\s*([\d.]+)')
 
-def _first(rx, text):
-    m = rx.search(text)
-    return m.group(1).strip() if m else None
+def _chart_url(chart, category, region):
+    if chart == "category":
+        return f"https://play.google.com/store/apps/category/{category}?hl=en&gl={region}"
+    return f"https://play.google.com/store/apps/top?hl=en&gl={region}"
 
-def parse(html, chart, region, limit):
+def parse(html, chart_label, region, limit):
     entries = []
-    for i, m in enumerate(ROW.finditer(html), start=1):
-        if i > limit:
-            break
-        rest = m.group("rest")
-        rating = _first(RAT, rest)
+    seen = set()
+    for m in LINK.finditer(html):
+        pkg = m.group(1)
+        if pkg in seen:
+            continue
+        win = html[m.start():m.start() + 1600]   # one card's worth of markup
+        nm = NAME.search(win)
+        if not nm:
+            continue   # icon-only anchor with no title nearby; skip
+        seen.add(pkg)
+        rt = RATE_ARIA.search(win) or RATE_STAR.search(win)
         entries.append({
-            "rank": i,
-            "name": m.group("name").strip(),
-            "developer": _first(DEV, rest),
-            "category": _first(CAT, rest),
-            "package": m.group("package"),
-            "rating": float(rating) if rating else None,
-            "installs": _first(INST, rest),
+            "rank": len(entries) + 1,
+            "name": _html.unescape(nm.group(1).strip()),
+            "package": pkg,
+            "rating": float(rt.group(1)) if rt else None,
         })
-    return {"source": "appbrain", "chart": chart, "region": region,
+        if len(entries) >= limit:
+            break
+    return {"source": "google-play", "chart": chart_label, "region": region,
             "count": len(entries), "entries": entries}
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("chart", choices=sorted(CHARTS))
-    ap.add_argument("--region", default="us")
+    ap.add_argument("chart", choices=("top", "category"))
+    ap.add_argument("--category")
+    ap.add_argument("--region", default="US")
     ap.add_argument("--limit", type=int, default=25)
     ap.add_argument("--html-file")
     args = ap.parse_args()
+
+    if args.chart == "category" and not args.category:
+        print("ERROR: --category is required for the 'category' chart", file=sys.stderr)
+        sys.exit(2)
+    chart_label = f"category:{args.category}" if args.chart == "category" else "top"
 
     if args.html_file:
         with open(args.html_file, encoding="utf-8") as f:
             html = f.read()
     else:
         try:
-            html = _http_get(CHARTS[args.chart])
+            html = _http_get(_chart_url(args.chart, args.category, args.region))
         except Exception as e:
-            print(f"ERROR: failed to fetch AppBrain chart: {e}", file=sys.stderr)
+            print(f"ERROR: failed to fetch Play chart: {e}", file=sys.stderr)
             sys.exit(1)
 
-    print(json.dumps(parse(html, args.chart, args.region, args.limit), indent=2))
+    print(json.dumps(parse(html, chart_label, args.region, args.limit), indent=2))
 
 if __name__ == "__main__":
     main()
@@ -241,18 +239,18 @@ Run: `chmod +x plugins/market-research/skills/market-research/scripts/fetch-play
 Run: `python3 plugins/market-research/tests/test-fetch-play-charts.py`
 Expected: every line `PASS`, exit 0.
 
-- [ ] **Step 7: Validate the selectors against live AppBrain once**
+- [ ] **Step 7: Validate the selectors against live Play once**
 
-Run: `python3 plugins/market-research/skills/market-research/scripts/fetch-play-charts.py popular --limit 5`
-Expected: JSON with ~5 entries carrying real `com.*` packages. **If the live markup differs from the fixture** (empty `entries`), update both the regexes in the script AND `appbrain-popular.html` to match the real structure, then re-run Step 6 until the offline test passes against the corrected fixture. If AppBrain blocks/changes hosting, record the failure in the commit message and keep the script (the skill degrades to Apple RSS + web).
+Run: `python3 plugins/market-research/skills/market-research/scripts/fetch-play-charts.py category --category PRODUCTIVITY --limit 5`
+Expected: JSON with ~5 entries carrying real `com.*` packages and names (e.g. ChatGPT, Google Keep). Also smoke `top`: `... top --limit 5`. **If live `entries` come back empty** (Play rotated the obfuscated `Epkrse` title class), find the new title class in the live HTML, update `NAME` in the script AND the `class="Epkrse "` strings in `play-chart.html` to match, then re-run Step 6 until the offline test passes against the corrected fixture. The package link is stable, so an empty result means the title-class selector — not the link — drifted. If Play is unreachable from this environment, keep the script as-is, note it in the report, and still commit (the offline test must pass regardless).
 
 - [ ] **Step 8: Commit**
 
 ```bash
 git add plugins/market-research/skills/market-research/scripts/fetch-play-charts.py \
         plugins/market-research/tests/test-fetch-play-charts.py \
-        plugins/market-research/tests/fixtures/appbrain-popular.html
-git commit -m "feat(market-research): add AppBrain Play-charts scraper"
+        plugins/market-research/tests/fixtures/play-chart.html
+git commit -m "feat(market-research): add play.google.com charts scraper"
 ```
 
 ---
@@ -624,7 +622,7 @@ def main():
     check("trend_pct", d["trend_pct"] == 100.0)        # (100-50)/50*100
 
     # bad fixture -> graceful fallback, still exit 0
-    rc2, d2 = run("x", "--json-file", os.path.join(HERE, "fixtures", "appbrain-popular.html"))
+    rc2, d2 = run("x", "--json-file", os.path.join(HERE, "fixtures", "play-chart.html"))
     check("fallback exit 0", rc2 == 0)
     check("fallback ok false", d2["ok"] is False)
     check("fallback flag", d2["fallback"] == "websearch")
@@ -775,7 +773,7 @@ Every number that lands in the report carries the URL it came from.
 | Source | Pull | How (free) |
 |---|---|---|
 | **Google Trends** | interest-over-time, % momentum, breakout/rising queries | `trends.py "<term>"`; on `{"ok":false}` fall back to WebSearch `google trends <term>`. |
-| **AppBrain** | install brackets, category rank/share, Android growth | `fetch-play-charts.py` for charts; WebSearch `appbrain <app/category> statistics` for detail pages. |
+| **play.google.com** | ranked Android packages, per-app installs/rating | `fetch-play-charts.py` for top/category charts; `play.py resolve` for per-app installs/rating. |
 | **Sensor Tower (blog/reports)** | downloads, revenue, DAU, YoY growth | WebSearch `sensortower <category> revenue downloads 2026`; WebFetch the article; quote the figure + date. |
 | **data.ai / Apptopia posts** | top-charts movement, market revenue | WebSearch `data.ai <category> market 2026`; WebFetch + cite. |
 | **Statista (free public charts)** | market size $, user counts, CAGR | WebSearch `statista <category> market size`; use the visible free figure only; cite. |
@@ -849,7 +847,7 @@ or `null`. A field that is `null` caps that subscore at 60.
 | Subscore | Evidence that lifts the cap above 60 |
 |---|---|
 | Cloneability | a stack/complexity signal (e.g. "few endpoints — RE later"); no external number required, but state the basis. |
-| Market opportunity | an installs figure (AppBrain/Play) AND either a Trends `trend_pct` OR a saturation `app_count`. |
+| Market opportunity | an installs figure (Play via `play.py resolve`) AND either a Trends `trend_pct` OR a saturation `app_count`. |
 | Monetization fit | a category ARPU/revenue figure (Sensor Tower/data.ai/Statista) OR top-grossing chart presence. |
 | Niche gap | a region/language gap signal (saturation `app_count` low in region, or no localized incumbent). |
 
@@ -914,7 +912,7 @@ Every number carries a source link. Every candidate carries 1–2 Google Play li
 ## Run parameters
 - Angles this run: <categories / regions / niche lens chosen in Phase 0>
 - Focus argument: <the user's focus, or "none">
-- Sources: Apple RSS (<feeds/regions>) + AppBrain Play charts (<charts>) + web numeric (<sources>) + Trends (<ok/fallback>)
+- Sources: Apple RSS (<feeds/regions>) + play.google.com charts (<charts>) + web numeric (<sources>) + Trends (<ok/fallback>)
 - Candidates after history exclusion: <N> (history had <M> prior suggestions)
 
 ## Top candidates (ranked)
@@ -984,14 +982,17 @@ python3 ${CLAUDE_PLUGIN_ROOT}/skills/market-research/scripts/fetch-charts.py \
 python3 ${CLAUDE_PLUGIN_ROOT}/skills/market-research/scripts/fetch-charts.py \
   topgrossingapplications --region <region> --limit 25 > "$WORK/charts-<region>-grossing.json"
 ```
-AppBrain Play charts (Android signal — REAL packages):
+play.google.com charts (Android signal — REAL packages). Pull the overall top
+plus one category page per chosen category (Play category code, e.g.
+`PRODUCTIVITY`, `GAME_PUZZLE`, `FINANCE`):
 ```bash
 python3 ${CLAUDE_PLUGIN_ROOT}/skills/market-research/scripts/fetch-play-charts.py \
-  popular --limit 25 > "$WORK/play-popular.json"
+  top --region <region> --limit 25 > "$WORK/play-top-<region>.json"
 python3 ${CLAUDE_PLUGIN_ROOT}/skills/market-research/scripts/fetch-play-charts.py \
-  top-grossing --limit 25 > "$WORK/play-grossing.json"
+  category --category <CAT> --region <region> --limit 25 > "$WORK/play-<CAT>.json"
 ```
-If any fetch fails, note it and continue with the feeds you got.
+If any fetch fails (Play may rotate its obfuscated title class), note it and
+continue with the feeds you got — Apple RSS + web signal still stand.
 
 ## Phase 2: Trend + numeric signal
 Read `${CLAUDE_PLUGIN_ROOT}/skills/market-research/references/numeric-sources.md`.
@@ -1005,10 +1006,11 @@ If a `trends.py` result is `{"ok": false, "fallback": "websearch"}`, WebSearch t
 same momentum signal instead. Vary queries by the run's angles.
 
 ## Phase 3: Synthesize ≥12 candidates
-Cluster chart entries (Apple + AppBrain) + web findings into ≥12 distinct ideas
-(synthesize > 10 so dedup still leaves ≥10). For each: name, category,
-what-it-does, why-now (with a cited number where available), incumbent(s),
-monetization model. AppBrain entries already give an Android `package`; carry it.
+Cluster chart entries (Apple RSS + play.google.com) + web findings into ≥12
+distinct ideas (synthesize > 10 so dedup still leaves ≥10). For each: name,
+category, what-it-does, why-now (with a cited number where available),
+incumbent(s), monetization model. play.google.com entries already give an
+Android `package`; carry it.
 Write the working list as a JSON array (objects with at least `name`, optional
 `package`, `category`) to `$WORK/candidates.json`.
 
@@ -1066,7 +1068,7 @@ stands on its own.
 | Scenario | Action |
 |---|---|
 | `fetch-charts.py` / `fetch-play-charts.py` fails | note it, continue with other feeds/web search |
-| AppBrain blocks or markup changed | continue on Apple RSS + web signal |
+| play.google.com chart fetch fails / title class rotated | continue on Apple RSS + web signal; package link stays stable |
 | `play.py resolve` finds no package | flag candidate "Play link unresolved", skip handoff |
 | Play link fails WebFetch verify | drop that link; if none verify, flag unresolved |
 | `trends.py` returns `{"ok": false}` | WebSearch the same momentum signal |
@@ -1154,7 +1156,7 @@ git commit -m "test(market-research): cover v2 scripts in smoke; update README"
 
 ## Self-Review Notes (for the executor)
 
-- **Spec coverage:** AppBrain charts → Task 1; Play resolver + links → Task 2; saturation → Task 3; Trends best-effort → Task 4; numeric sources → Task 5; numeric scoring → Task 6; report links/citations/saturation → Task 7; survivor-only phase flow + WebFetch verify → Task 8; smoke/README/full-suite + RE-untouched gate → Task 9.
+- **Spec coverage:** play.google.com charts → Task 1; Play resolver + links → Task 2; saturation → Task 3; Trends best-effort → Task 4; numeric sources → Task 5; numeric scoring → Task 6; report links/citations/saturation → Task 7; survivor-only phase flow + WebFetch verify → Task 8; smoke/README/full-suite + RE-untouched gate → Task 9.
 - **Live-markup risk** is handled by the per-scraper "validate against live once" step (Tasks 1 Step 7, 2 Step 8); fix script + fixture together if reality differs, keep the offline test green.
 - **No new pip deps, no API keys, all stdlib** — every script mirrors `fetch-charts.py`'s `_http_get` fallback pattern.
 - **`trends.py` never hard-fails** — verified by the fallback assertions in Task 4 test.

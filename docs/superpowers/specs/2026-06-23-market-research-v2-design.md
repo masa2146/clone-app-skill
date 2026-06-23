@@ -30,7 +30,7 @@ method that actually works free:
 | Source | Method | Why |
 |---|---|---|
 | Apple App Store RSS | existing `fetch-charts.py` | Public no-auth JSON feed. Keep. |
-| Google Play charts | **AppBrain HTML** via new `fetch-play-charts.py` | Play itself has no public feed and renders via obfuscated `batchexecute` JS. AppBrain publishes scrapeable server-rendered HTML top-charts with real Android packages. |
+| Google Play charts | **`play.google.com` HTML** via new `fetch-play-charts.py` | Play has no public JSON feed, but its server-rendered HTML for `/store/apps/top` and `/store/apps/category/<CAT>` returns ~45–70 ranked app cards carrying real Android packages + names (validated live: 46/46). AppBrain — the original plan's source — is Cloudflare-blocked (HTTP 403) for free scraping, so it was dropped. |
 | Play link + stats per candidate | new `play.py resolve` | `play.google.com/store/search?q=…&c=apps` is server-rendered enough to grep the first `details?id=` link; the details page carries rating/installs/last-updated in embedded `ld+json` (same parse clone-app's `scrape-play-store.py` already uses). |
 | Saturation / competition density | new `play.py count` | Count distinct `details?id=` links + their ratings on the first Play search results page. Approximate but real. |
 | Google Trends | best-effort `trends.py` + WebSearch fallback | No key, but the unofficial endpoint needs a token dance and is fragile under stdlib-only. Script is best-effort and **never hard-fails**; on any failure the skill falls back to WebSearch for the same signal. |
@@ -44,12 +44,16 @@ helper scripts; judgment steps follow reference rubrics.
 ### New scripts (`skills/market-research/scripts/`)
 
 **`fetch-play-charts.py`**
-- Input: a chart kind (`popular` / `top-grossing` / `top-new`, mapped to AppBrain
-  paths), `--region` (where AppBrain supports it), `--limit`, `--html-file` (offline test).
-- Output: normalized JSON `{ "source": "appbrain", "chart": ..., "count": N,
-  "entries": [ {rank, name, developer, category, package, rating, installs} ] }`.
+- Input: a chart kind (`top` = `play.google.com/store/apps/top`, or `category`
+  with `--category <CAT>` = `/store/apps/category/<CAT>`), `--region` (Play `gl`
+  code), `--limit`, `--html-file` (offline test).
+- Output: normalized JSON `{ "source": "google-play", "chart": ..., "region": R,
+  "count": N, "entries": [ {rank, name, package, rating} ] }`. (`rating` is
+  best-effort and may be `None`; rank+name+package is the load-bearing signal.)
 - Mirrors `fetch-charts.py`'s shape and its `curl` SSL fallback.
-- Entries carry **real Android `package`s** (unlike Apple's iOS bundle ids).
+- Entries carry **real Android `package`s** (unlike Apple's iOS bundle ids),
+  parsed from Play app cards: `href="/store/apps/details?id=PKG"` +
+  `class="Epkrse …">NAME</div>` (validated live: 46/46 on a category page).
 
 **`play.py`** — two subcommands, both with `--html-file` for offline tests:
 - `resolve "<app name>"` → scrape Play search, take the top apps hit, fetch its
@@ -97,7 +101,7 @@ not all raw candidates.
 
 ```
 Phase 0  Seed rotation         (unchanged)
-Phase 1  Gather charts         Apple RSS (fetch-charts.py) + AppBrain Play
+Phase 1  Gather charts         Apple RSS (fetch-charts.py) + play.google.com
                                charts (fetch-play-charts.py) per region
 Phase 2  Trend + numeric       WebSearch per numeric-sources.md; trends.py per
                                top themes (fallback to WebSearch on failure)
@@ -130,7 +134,9 @@ rule as today's iOS-only case).
 ## Out of scope
 
 - Cross-platform gap detection (iOS-popular / Android-missing) — explicitly cut.
-- Scraping play.google.com charts directly — AppBrain used instead.
+- AppBrain as a chart source — Cloudflare-blocked (403), dropped for play.google.com.
+- Top-grossing Play chart — Play exposes no clean grossing URL without JS; Apple
+  RSS `topgrossingapplications` carries the monetization-rank signal instead.
 - Any pip dependency, API key, or paid tier.
 - Changes outside `plugins/market-research/`.
 
@@ -138,8 +144,8 @@ rule as today's iOS-only case).
 
 - `fetch-play-charts.py`, `play.py` (both subcommands), `trends.py` each get an
   offline fixture test driven by `--html-file` / `--json-file`. New fixtures:
-  AppBrain chart HTML, a Play search results HTML, a Play details HTML, a Trends
-  JSON response.
+  a Play chart-page HTML, a Play search results HTML, a Play details HTML, a
+  Trends JSON response.
 - Each scraper's first implementation task: fetch live once, save the fixture,
   confirm the parser. Then all subsequent tests run offline.
 - `run-all.sh` and `smoke-structure.sh` extended to cover the new scripts/refs.
@@ -147,9 +153,11 @@ rule as today's iOS-only case).
 
 ## Risks
 
-- **AppBrain markup drift / blocking.** Mitigation: fixture-driven parser isolates
-  the brittle selector; the skill notes a failed Play-chart fetch and continues on
-  Apple RSS + web signal (same degrade-gracefully pattern as today).
+- **Play HTML class-name drift** (Play obfuscates classes like `Epkrse`, which can
+  rotate). Mitigation: fixture-driven parser isolates the brittle selector; the
+  package link (`/store/apps/details?id=`) is stable even when title classes
+  rotate, so rank+package survives a class change; the skill notes a failed
+  Play-chart fetch and continues on Apple RSS + web signal.
 - **Google Trends fragility.** Mitigation by design: `trends.py` never hard-fails;
   WebSearch fallback covers the same signal.
 - **Play search HTML variance by region/locale.** Mitigation: force an `hl=en&gl=US`
