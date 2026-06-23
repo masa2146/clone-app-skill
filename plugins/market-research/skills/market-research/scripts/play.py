@@ -67,9 +67,9 @@ def parse_details(html, package):
                 try: out["rating"] = float(ar["ratingValue"])
                 except Exception: pass
             break
-    m = re.search(r'([\d,]+\+)\s*</[^>]+>\s*<[^>]*>\s*Downloads', html)
+    m = re.search(r'([\d.,]+[KMB]?\+)\s*</[^>]+>\s*<[^>]*>\s*Downloads', html)
     if not m:
-        m = re.search(r'([\d,]+\+)\s*<span>\s*Downloads', html)
+        m = re.search(r'([\d.,]+[KMB]?\+)\s*<span>\s*Downloads', html)
     if m:
         out["installs"] = m.group(1)
     m = re.search(r'Updated on\s*</[^>]+>\s*<[^>]*>([^<]+)</[^>]+>', html)

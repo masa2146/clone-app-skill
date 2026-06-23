@@ -20,7 +20,7 @@ def main():
     check("play_url", r["play_url"] == "https://play.google.com/store/apps/details?id=com.example.habit")
     check("name", r["name"] == "Habit Tracker")
     check("rating", r["rating"] == 4.6)
-    check("installs", r["installs"] == "5,000,000+")
+    check("installs", r["installs"] == "1B+")
     check("last_updated", r["last_updated"] == "Jun 1, 2026")
     check("developer", r["developer"] == "Focus Labs")
 
