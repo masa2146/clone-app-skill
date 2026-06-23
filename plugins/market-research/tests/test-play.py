@@ -24,6 +24,12 @@ def main():
     check("last_updated", r["last_updated"] == "Jun 1, 2026")
     check("developer", r["developer"] == "Focus Labs")
 
+    c = run("count", "habit tracker", "--search-file", SEARCH)
+    check("app_count", c["app_count"] == 3)
+    check("avg_rating", c["avg_rating"] == 4.2)  # mean(4.6,4.1,3.9)=4.2
+    check("top_packages has habit", "com.example.habit" in c["top_packages"])
+    check("top_packages distinct", len(c["top_packages"]) == len(set(c["top_packages"])))
+
     sys.exit(1 if fails else 0)
 
 main()

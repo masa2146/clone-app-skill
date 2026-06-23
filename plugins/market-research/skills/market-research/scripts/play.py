@@ -94,6 +94,17 @@ def cmd_resolve(args):
     res.update(parse_details(details, package))
     print(json.dumps(res, indent=2))
 
+def cmd_count(args):
+    html = _search_html(args.query, args.search_file)
+    packages = []
+    for pkg in ID_RE.findall(html):
+        if pkg not in packages:
+            packages.append(pkg)
+    ratings = [float(x) for x in STAR_RE.findall(html)]
+    avg = round(sum(ratings) / len(ratings), 2) if ratings else None
+    print(json.dumps({"query": args.query, "app_count": len(packages),
+                      "avg_rating": avg, "top_packages": packages}, indent=2))
+
 def main():
     ap = argparse.ArgumentParser()
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -101,13 +112,15 @@ def main():
     pr.add_argument("query")
     pr.add_argument("--search-file")
     pr.add_argument("--details-file")
+    pc = sub.add_parser("count")
+    pc.add_argument("query")
+    pc.add_argument("--search-file")
     args = ap.parse_args()
-    if args.cmd == "resolve":
-        try:
-            cmd_resolve(args)
-        except Exception as e:
-            print(f"ERROR: play resolve failed: {e}", file=sys.stderr)
-            sys.exit(1)
+    try:
+        {"resolve": cmd_resolve, "count": cmd_count}[args.cmd](args)
+    except Exception as e:
+        print(f"ERROR: play {args.cmd} failed: {e}", file=sys.stderr)
+        sys.exit(1)
 
 if __name__ == "__main__":
     main()
