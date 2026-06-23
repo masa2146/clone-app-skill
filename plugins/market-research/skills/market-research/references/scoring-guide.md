@@ -1,43 +1,54 @@
-# Scoring Guide
+# Scoring Guide (numeric)
 
-Score every candidate 0–100 as a weighted composite. Three PRIMARY components
-(cloneability, market opportunity, monetization fit) plus a secondary tiebreaker
-(niche gap). Show the component scores, not just the total, so picks are auditable.
+Score every candidate 0–100 as a weighted composite of three PRIMARY components
+plus a tiebreaker. **Every subscore must be justified by at least one real number
+with a source** (see numeric-sources.md). A subscore with no supporting number is
+CAPPED at 60 — you may not assign a high score on vibes.
 
-## Components & weights
+## Components & weights (unchanged)
 
-| Component | Weight | What it measures |
+| Component | Weight | Measures |
 |---|---|---|
 | Cloneability | 35% | How cheaply this rebuilds with clone-app + AI. |
-| Market opportunity | 35% | Demand, growth, and incumbent weakness. |
+| Market opportunity | 35% | Demand, growth, incumbent weakness. |
 | Monetization fit | 20% | Ads/IAP friendliness and category ARPU. |
 | Niche gap (tiebreaker) | 10% | Underserved region/language/segment. |
 
-Total = 0.35·clone + 0.35·market + 0.20·monetization + 0.10·niche, each subscore 0–100.
+`total = 0.35·clone + 0.35·market + 0.20·monetization + 0.10·niche`, each 0–100.
 
-## Scoring each component (0–100)
+## Required evidence per subscore
 
-**Cloneability** — higher = easier:
-- 80–100: simple CRUD/utility, few backend endpoints, no heavy ML, standard UI.
-- 50–79: moderate backend, some real-time or media, mainstream third-party SDKs.
-- 0–49: heavy ML/on-device models, complex real-time/multiplayer, deep native, large content moat.
+Attach an `evidence` object to each candidate. Each field is `"<number> + source"`
+or `null`. A field that is `null` caps that subscore at 60.
 
-**Market opportunity** — higher = better:
-- 80–100: strong/growing demand, dated or weak incumbents, clear unmet need.
-- 50–79: healthy demand, beatable incumbents.
-- 0–49: saturated, dominated by entrenched well-funded players.
+| Subscore | Evidence that lifts the cap above 60 |
+|---|---|
+| Cloneability | a stack/complexity signal (e.g. "few endpoints — RE later"); no external number required, but state the basis. |
+| Market opportunity | an installs figure (Play via `play.py resolve`) AND either a Trends `trend_pct` OR a saturation `app_count`. |
+| Monetization fit | a category ARPU/revenue figure (Sensor Tower/data.ai/Statista) OR top-grossing chart presence. |
+| Niche gap | a region/language gap signal (saturation `app_count` low in region, or no localized incumbent). |
 
-**Monetization fit** — higher = better:
-- 80–100: category with proven ads+IAP and high ARPU (casual games, utilities).
-- 50–79: monetizable but moderate ARPU.
-- 0–49: hard to monetize / users expect free.
+## Scoring bands (0–100)
 
-**Niche gap** — higher = more underserved:
-- 80–100: clear language/region/segment with no quality option.
-- 0–49: well served everywhere.
+**Cloneability** (higher = easier): 80–100 simple CRUD/utility, few endpoints, no
+heavy ML. 50–79 moderate backend/media, mainstream SDKs. 0–49 heavy ML/native/
+real-time/large content moat.
+
+**Market opportunity** (higher = better): 80–100 strong/growing demand (high
+installs + positive `trend_pct`), weak/dated incumbents, low saturation. 50–79
+healthy demand, beatable incumbents, moderate saturation. 0–49 saturated
+(`app_count` high, strong avg rating) or entrenched well-funded players.
+
+**Monetization fit** (higher = better): 80–100 proven ads+IAP, high ARPU
+(casual games, utilities) with a cited revenue figure. 50–79 monetizable, moderate
+ARPU. 0–49 users expect free / hard to monetize.
+
+**Niche gap** (higher = more underserved): 80–100 clear region/language/segment
+with no quality option (low regional `app_count`). 0–49 well served everywhere.
 
 ## Output per candidate
 
-For each candidate keep: `name`, `package` (if resolved), `category`, the four
-subscores, the weighted `total`, and a one-line rationale. Rank by `total`
-descending. Produce at least 10 candidates AFTER history exclusion.
+Keep: `name`, `package` (if resolved), `play_url`(s), `category`, the four
+subscores, `evidence` (the cited numbers + source URLs), the weighted `total`,
+and a one-line rationale. Rank by `total` descending. Produce ≥10 candidates
+AFTER history exclusion.
