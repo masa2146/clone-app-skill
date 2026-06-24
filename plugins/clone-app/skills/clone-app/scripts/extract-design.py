@@ -10,7 +10,7 @@ layer (confidence high); Compose keeps tokens in res/values but no layouts
 (med); Flutter/React Native keep almost nothing in Android res (low) so the
 caller leans on screenshots. Pass --framework to override the auto guess.
 """
-import sys, os, json, re, argparse, glob
+import os, json, argparse, glob
 import xml.etree.ElementTree as ET
 
 def _find_res_dirs(root):

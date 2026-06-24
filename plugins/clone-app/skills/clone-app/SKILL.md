@@ -103,12 +103,17 @@ Tell the subagent its clone-app scripts dir is
    - **Unity (`il2cpp`):** locate `libil2cpp.so` + `global-metadata.dat` under
      `$WORK/output` (or unzip from `$APK`); run
      `bash "$CA/il2cpp-dump.sh" <so> <metadata> "$WORK/unity-out"` and
-     `bash "$CA/unity-assets.sh" "$APK" "$WORK/game-assets"`; write
+     `bash "$CA/unity-assets.sh" "$APK" "$WORK/game-assets"`; inventory
+     `$WORK/game-assets/` into `$WORK/game-assets/manifest.json` (a JSON list
+     of `{"path": ..., "type": ...}` entries for every extracted file); write
      `$WORK/unity-digest.md` (type model + netcode) per `unity-re-guide.md`.
-   - **Unity (`mono`):** decompile the managed assemblies with
-     `ilspycmd "$WORK/output/Managed/Assembly-CSharp.dll" -o "$WORK/unity-out"`
-     (repeat for other `Managed/*.dll` of interest; near-source C#), plus
-     `bash "$CA/unity-assets.sh" "$APK" "$WORK/game-assets"`; write
+   - **Unity (`mono`):** extract `assets/bin/Data/Managed/*.dll` from `$APK`
+     (for an XAPK, from the nested `base.apk`) into `$WORK/managed/`, then
+     `ilspycmd "$WORK/managed/Assembly-CSharp.dll" -o "$WORK/unity-out"`
+     (repeat for other DLLs of interest; near-source C#), plus
+     `bash "$CA/unity-assets.sh" "$APK" "$WORK/game-assets"`; inventory
+     `$WORK/game-assets/` into `$WORK/game-assets/manifest.json` (a JSON list
+     of `{"path": ..., "type": ...}` entries for every extracted file); write
      `$WORK/unity-digest.md` per `unity-re-guide.md`.
    - If a Unity tool exits 3 (missing), continue with a partial digest and set
      `RE Method: limited: unity-no-tools`.
