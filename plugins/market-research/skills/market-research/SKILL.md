@@ -9,7 +9,7 @@ Scan the app/game market with free sources, score candidates, and hand the ones
 you pick to the `clone-app` skill. Every run rotates its search angles and
 excludes everything suggested before, so results stay fresh.
 
-This skill orchestrates 6 phases (0–5). Deterministic steps are factored into
+This skill orchestrates 8 phases (0–7). Deterministic steps are factored into
 helper scripts under `${CLAUDE_PLUGIN_ROOT}/skills/market-research/scripts/`;
 AI-judgment steps follow rubrics under `.../references/`.
 
@@ -36,51 +36,86 @@ used lately. Choose 2–3 categories, 1–2 regions, and 1 niche lens you did NO
 last run. If the command passed a focus argument, force one category to match it.
 State the chosen angles to the user in one line before continuing.
 
-## Phase 1: Gather (free web)
-Hard chart data — for each chosen region, pull the relevant feeds:
+## Phase 1: Gather charts (free)
+For each chosen region pull BOTH stores. Apple RSS (iOS signal — bundle ids, not
+Android packages):
 ```bash
 python3 ${CLAUDE_PLUGIN_ROOT}/skills/market-research/scripts/fetch-charts.py \
   topfreeapplications --region <region> --limit 25 > "$WORK/charts-<region>-free.json"
 python3 ${CLAUDE_PLUGIN_ROOT}/skills/market-research/scripts/fetch-charts.py \
   topgrossingapplications --region <region> --limit 25 > "$WORK/charts-<region>-grossing.json"
 ```
-(Top-grossing = monetization signal; top-free = demand signal. Add
-`toppaidapplications` if willingness-to-pay matters for the angle.) If a fetch
-fails, note it and continue with the feeds you got.
+play.google.com charts (Android signal — REAL packages). Pull the overall top
+plus one category page per chosen category (Play category code, e.g.
+`PRODUCTIVITY`, `GAME_PUZZLE`, `FINANCE`):
+```bash
+python3 ${CLAUDE_PLUGIN_ROOT}/skills/market-research/scripts/fetch-play-charts.py \
+  top --region <region> --limit 25 > "$WORK/play-top-<region>.json"
+python3 ${CLAUDE_PLUGIN_ROOT}/skills/market-research/scripts/fetch-play-charts.py \
+  category --category <CAT> --region <region> --limit 25 > "$WORK/play-<CAT>.json"
+```
+If any fetch fails (Play may rotate its obfuscated title class), note it and
+continue with the feeds you got — Apple RSS + web signal still stand.
 
-Trend signal — use WebSearch for the chosen categories/niches: new releases,
-ProductHunt launches, Reddit/news chatter in the last ~90 days, "fastest growing
-<category> apps 2026", dated-incumbent complaints. Vary the queries by the
-run's angles so two runs don't search the same terms. These results are the
-qualitative half the charts can't give.
+## Phase 2: Trend + numeric signal
+Read `${CLAUDE_PLUGIN_ROOT}/skills/market-research/references/numeric-sources.md`.
+For the chosen categories/niches, WebSearch the named numeric sources and pull
+real figures (market size, downloads, revenue, YoY) WITH their source URLs. For
+the top themes, attempt Trends momentum:
+```bash
+python3 ${CLAUDE_PLUGIN_ROOT}/skills/market-research/scripts/trends.py "<theme>"
+```
+If a `trends.py` result is `{"ok": false, "fallback": "websearch"}`, WebSearch the
+same momentum signal instead. Vary queries by the run's angles.
 
-## Phase 2: Synthesize candidates
-Cluster the chart entries + web findings into **at least 12** distinct app/game
-ideas (synthesize more than 10 so dedup in Phase 4 still leaves ≥10). For each:
-name, category, what-it-does, why-now (trend signal), incumbent(s), monetization
-model. Note that App Store `bundle_id`s from the charts are iOS — treat them as
-signal, not Android packages. Write the working list as a JSON array (objects
-with at least `name`, optional `package`, `category`) to `$WORK/candidates.json`.
+## Phase 3: Synthesize ≥12 candidates
+Cluster chart entries (Apple RSS + play.google.com) + web findings into ≥12
+distinct ideas (synthesize > 10 so dedup still leaves ≥10). For each: name,
+category, what-it-does, why-now (with a cited number where available),
+incumbent(s), monetization model. play.google.com entries already give an
+Android `package`; carry it.
+Write the working list as a JSON array (objects with at least `name`, optional
+`package`, `category`) to `$WORK/candidates.json`.
 
-## Phase 3: Score
-Read `${CLAUDE_PLUGIN_ROOT}/skills/market-research/references/scoring-guide.md`.
-Score every candidate's four components and weighted total. Add the subscores and
-`total` to each object in `$WORK/candidates.json`. Rank by `total` descending.
-
-## Phase 4: History dedup
-Drop anything already suggested:
+## Phase 4: Cheap score + history dedup
+Score each candidate on the chart/trend signal you ALREADY have (don't enrich
+yet — that's Phase 5). Then drop anything suggested before:
 ```bash
 python3 ${CLAUDE_PLUGIN_ROOT}/skills/market-research/scripts/history.py \
   filter --history "$WORK/history.json" < "$WORK/candidates.json" > "$WORK/fresh.json"
 ```
-If fewer than 10 candidates survive, go back to Phase 1/2 with a different angle
-and synthesize more, then re-filter — never present a padded or repeated list.
+If fewer than 10 survive, loop back to Phase 1/2 with a DIFFERENT angle and
+synthesize more, then re-filter. Never present a padded or repeated list.
 
-## Phase 5: Present + handoff
+## Phase 5: Enrich survivors only (efficiency)
+For the surviving top ~10 ONLY (never the full raw set), enrich each:
+1. Resolve 1–2 Play links + stats:
+   ```bash
+   python3 ${CLAUDE_PLUGIN_ROOT}/skills/market-research/scripts/play.py \
+     resolve "<candidate name>"
+   ```
+2. **Verify** each resolved `play_url` with WebFetch — confirm HTTP 200 and the
+   `id=<package>` is present on the page. Drop dead/mismatched links. A candidate
+   with no verifiable link is flagged "Play link unresolved" (kept in report,
+   skipped on handoff).
+3. Saturation:
+   ```bash
+   python3 ${CLAUDE_PLUGIN_ROOT}/skills/market-research/scripts/play.py \
+     count "<category or core feature>"
+   ```
+4. Momentum (`trends.py` as in Phase 2) if not already pulled.
+
+## Phase 6: Re-score with numbers
+Read `${CLAUDE_PLUGIN_ROOT}/skills/market-research/references/scoring-guide.md`.
+Re-score every surviving candidate using the enriched numbers; attach the
+`evidence` object (cited installs / trend % / saturation / ARPU). Rank by `total`
+descending. Subscores with no supporting number are capped per the guide.
+
+## Phase 7: Present + handoff
 Read `${CLAUDE_PLUGIN_ROOT}/skills/market-research/references/report-template.md`.
-Fill it from `$WORK/fresh.json` and write `$WORK/research-<YYYY-MM-DD>.md` (use
-the actual run date). Show the user the ranked table (≥10 rows) and your top-3
-recommended picks.
+Fill it from the enriched, re-scored survivors and write
+`$WORK/research-<YYYY-MM-DD>.md`. Show the user the ranked table (≥10 rows, with
+Play links + saturation) and your top-3 picks.
 
 Record this run's suggestions so they won't repeat:
 ```bash
@@ -88,20 +123,20 @@ python3 ${CLAUDE_PLUGIN_ROOT}/skills/market-research/scripts/history.py \
   add --history "$WORK/history.json" --date <YYYY-MM-DD> --run-id "<RUN_ID>" \
   < "$WORK/fresh.json"
 ```
-
-Then ask which candidate(s) to pursue. For each pick:
-1. Resolve it to a Google Play package/URL. If you don't already have the package,
-   WebSearch `"<name>" site:play.google.com` (or the developer + app name) and
-   confirm the `play.google.com/store/apps/details?id=...` URL.
-2. Invoke the `clone-app` skill on that URL/package to run full feasibility.
-If the user picks nothing, stop — the report stands on its own.
+Then ask which candidate(s) to pursue. Each pick already has a verified Play URL —
+invoke the `clone-app` skill on it. If the user picks nothing, stop — the report
+stands on its own.
 
 ## Error Handling Summary
 | Scenario | Action |
 |---|---|
-| `fetch-charts.py` fails for a region | note it, continue with other feeds/web search |
+| `fetch-charts.py` / `fetch-play-charts.py` fails | note it, continue with other feeds/web search |
+| play.google.com chart fetch fails / title class rotated | continue on Apple RSS + web signal; package link stays stable |
+| `play.py resolve` finds no package | flag candidate "Play link unresolved", skip handoff |
+| Play link fails WebFetch verify | drop that link; if none verify, flag unresolved |
+| `trends.py` returns `{"ok": false}` | WebSearch the same momentum signal |
+| numeric source paywalled/JS-only | use only free-visible figures; never invent a number |
 | Web search returns thin results | broaden queries within the chosen angle, try another region |
 | < 10 candidates survive dedup | loop back to Phase 1/2 with a new angle, re-filter |
 | history.json missing/first run | treat as empty; all candidates are fresh |
-| Candidate has no resolvable Play package | skip the handoff for it, keep it in the report as iOS-only/unresolved |
 | User picks nothing | stop after writing the report |
