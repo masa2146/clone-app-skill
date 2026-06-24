@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+set -uo pipefail
+HERE="$(cd "$(dirname "$0")" && pwd)"
+SKILL="$HERE/../skills/clone-app/SKILL.md"
+fail=0
+has() {
+  if grep -qF "$1" "$SKILL"; then echo "PASS: SKILL has '$1'"
+  else echo "FAIL: SKILL missing '$1'"; fail=1; fi
+}
+
+has "extract-design.py"
+has "detect-unity.sh"
+has "il2cpp-dump.sh"
+has "unity-assets.sh"
+has "design-tokens.json"
+has "screenshots/"
+has "## Phase 8"
+has "clone-build-spec.md"
+has "clone-build-spec-template.md"
+has "unity-re-guide.md"
+has "design-capture-guide.md"
+
+exit $fail

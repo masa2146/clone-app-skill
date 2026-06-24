@@ -18,6 +18,10 @@ engineering reuses the sibling `android-reverse-engineering` plugin's scripts.
 Only analyze apps you are authorized to (your own, or for lawful interoperability
 / research). Surface this to the user if intent is unclear. Do not proceed for
 clearly infringing intent.
+Pixel-perfect cloning and extracting copyrighted assets (especially game art via
+AssetRipper) is high-risk. Proceed only for authorized use; the build spec
+recreates assets in the same style and treats extracted assets as reference, not
+ship-ready, outside authorized contexts.
 
 ## Phase 0: Input & Validation
 
@@ -77,6 +81,9 @@ skills and run bash). Pass it: `$PKG`, `$APK`, `$WORK`, the chosen **branch**,
 the resolved `$RE` scripts dir, and the path to `re-digest-contract.md`. Its
 instructions:
 
+Tell the subagent its clone-app scripts dir is
+`${CLAUDE_PLUGIN_ROOT}/skills/clone-app/scripts/` (pass it explicitly as `$CA`).
+
 1. **Run RE per branch.**
    - **re-skill:** invoke the android-reverse-engineering skill on `$APK`,
      output dir `$WORK/output` — run its full workflow (fingerprint, deps,
@@ -88,15 +95,33 @@ instructions:
      (add `--deobf` if obfuscation is heavy), `bash "$RE/recover-kotlin-names.sh"
      "$WORK/output/sources" "$WORK/output/names/"` if Kotlin, then
      `bash "$RE/find-api-calls.sh" "$WORK/output/sources"`.
-2. **Framework guard:** if the fingerprint is Flutter / React Native / Cordova
+2. **Detect Unity & capture design.** After decompile:
+   - `UNITY="$(bash "$CA/detect-unity.sh" "$APK")"` — prints exactly `il2cpp|mono|none`.
+   - **Non-Unity (`none`):** run
+     `python3 "$CA/extract-design.py" "$WORK/output" --package "$PKG" --out "$WORK/design-tokens.json" --digest "$WORK/design-digest.md"`
+     per `design-capture-guide.md`.
+   - **Unity (`il2cpp`):** locate `libil2cpp.so` + `global-metadata.dat` under
+     `$WORK/output` (or unzip from `$APK`); run
+     `bash "$CA/il2cpp-dump.sh" <so> <metadata> "$WORK/unity-out"` and
+     `bash "$CA/unity-assets.sh" "$APK" "$WORK/game-assets"`; write
+     `$WORK/unity-digest.md` (type model + netcode) per `unity-re-guide.md`.
+   - **Unity (`mono`):** `ilspycmd` the `Managed/*.dll`, plus
+     `bash "$CA/unity-assets.sh" "$APK" "$WORK/game-assets"`; write
+     `$WORK/unity-digest.md` per `unity-re-guide.md`.
+   - If a Unity tool exits 3 (missing), continue with a partial digest and set
+     `RE Method: limited: unity-no-tools`.
+3. **Framework guard:** if the fingerprint is Flutter / React Native / Cordova
    / Xamarin, Java decompile is shallow — produce a partial digest, set
    `RE Method: limited: <framework>`, payloads may be empty.
-3. **Extract** the Tier-1 endpoint inventory and Tier-2 payloads for **auth,
+4. **Extract** the Tier-1 endpoint inventory and Tier-2 payloads for **auth,
    payment/checkout, and the 1–2 core feature endpoints** (not every endpoint).
-4. **Write** `$WORK/re-digest.md`, `$WORK/payloads.json`, `$WORK/re-summary.txt`
-   exactly per `re-digest-contract.md`.
-5. **Return** the contents of `$WORK/re-summary.txt` plus the two file paths —
-   **never** raw decompiled sources.
+5. **Write** `$WORK/re-digest.md`, `$WORK/payloads.json`, `$WORK/re-summary.txt`
+   exactly per `re-digest-contract.md`. Also produce `$WORK/design-tokens.json`
+   and `$WORK/design-digest.md` (plus `$WORK/unity-digest.md` and
+   `$WORK/game-assets/` when Unity).
+6. **Return** the contents of `$WORK/re-summary.txt` plus a short `design-summary`
+   (and `unity-summary` when Unity) and the digest file paths —
+   **never** raw decompiled sources, resources, or assets.
 
 If the subagent fails, retry once; if it still fails and the **direct-scripts**
 branch is available (i.e. the Phase 2a probe returned `RC == 0`), re-dispatch on
@@ -123,6 +148,27 @@ python3 ${CLAUDE_PLUGIN_ROOT}/skills/clone-app/scripts/check-appstore.py "<title
 If Play scrape returned mostly nulls (page layout changed), fall back to a web
 search for the app's metrics and note the source. App Store absence is fine —
 continue with Google Play data only.
+
+Download the screenshots for visual ground truth:
+```bash
+mkdir -p "$WORK/screenshots"
+python3 - "$WORK/play.json" "$WORK/screenshots" <<'PY'
+import json, sys, os, urllib.request
+play, outdir = sys.argv[1], sys.argv[2]
+urls = (json.load(open(play)).get("screenshot_urls") or [])
+man = []
+for i, u in enumerate(urls, 1):
+    dest = os.path.join(outdir, f"{i:02d}.png")
+    try:
+        urllib.request.urlretrieve(u, dest); man.append({"order": i, "url": u, "path": dest})
+    except Exception as e:
+        print(f"WARN: screenshot {i} failed: {e}", file=sys.stderr)
+json.dump(man, open(os.path.join(outdir, "manifest.json"), "w"), indent=2)
+print(f"saved {len(man)} screenshots")
+PY
+```
+If `screenshot_urls` is null/empty (layout change), note it and rely on
+`design-tokens.json` + a web image search for visual reference.
 
 ## Phase 4: Stack Recommendation
 
@@ -151,6 +197,9 @@ Include a **Backend API Surface** section: summarize the Tier-1 inventory from
 `$WORK/re-digest.md` and the key-flow payloads from `$WORK/payloads.json` (host
 list, endpoint count, auth model, and the auth/payment/core request+response
 shapes). If RE Method was `limited:`, say so and note the reduced confidence.
+Also fill the **Design System** section from `$WORK/design-tokens.json` and
+`$WORK/design-digest.md` per `report-template.md`. For Unity apps, also fill
+the **Game Assets** section from `$WORK/unity-digest.md` per `report-template.md`.
 
 Write the report:
 ```
@@ -162,9 +211,25 @@ $WORK/clone-report-<YYYY-MM-DD>.md
 
 Ask: "Report saved to `$WORK/clone-report-<date>.md`. Proceed to build the
 implementation plan?"
-- **Yes** → invoke the `superpowers:writing-plans` skill, passing the report as
-  context (the selected stack, feature list, and effort table become the plan's spec).
+- **Yes** → proceed to Phase 8 to assemble the clone build spec, then hand off
+  to `superpowers:writing-plans`.
 - **No** → stop; the report stands on its own.
+
+## Phase 8: Assemble the Clone Build Spec
+
+Read `${CLAUDE_PLUGIN_ROOT}/skills/clone-app/references/clone-build-spec-template.md`.
+Assemble `$WORK/clone-build-spec.md` filling every section from the artifacts:
+- §2 from `$WORK/design-tokens.json` (+ `design-digest.md`),
+- §3 one entry per screen, each paired with `$WORK/screenshots/NN.png`,
+- §5 from `$WORK/payloads.json`, §6 data model from the RE digest,
+- §7 asset inventory from `$WORK/output` (or `$WORK/game-assets/` for Unity),
+- §8 acceptance criteria per screen + flow,
+- §10 absolute paths to every `$WORK/` artifact.
+Use the **Game variant** sections when RE Method indicated Unity.
+
+Then invoke `superpowers:writing-plans`, passing `$WORK/clone-build-spec.md` as
+the spec (NOT the feasibility report). The build spec is the single standalone
+input — a fresh session with it + `$WORK/` can build the clone.
 
 ## Error Handling Summary
 | Scenario | Action |
@@ -179,3 +244,6 @@ implementation plan?"
 | Play scrape returns nulls | web-search fallback, note source |
 | Heavy obfuscation | add uncertainty band, note in report |
 | writing-plans unavailable | write the plan as Markdown manually |
+| Unity build detected | run IL2CPP/Mono branch + AssetRipper |
+| Unity tool missing | continue, partial digest, RE Method `limited: unity-no-tools` |
+| No screenshots on Play | note it, rely on design-tokens + web image search |
