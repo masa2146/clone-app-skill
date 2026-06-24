@@ -25,9 +25,12 @@ the build spec relies more on screenshots and says so.
 
 ## What to record in `design-tokens.json`
 
-colors · dimens (spacing + `sp` text sizes) · typography (font files, text
-sizes) · shapes (corner/radius dimens) · theme (name, parent, dark flag, items)
-· icon path · layout inventory (count + file names). The caller fills `package`.
+Top-level scalar fields always present: `package` (caller-supplied), `source`
+(always `"apk-resources"`), `framework` (detected framework string).
+Token groups — each an object with `values` and `confidence`: `colors` ·
+`dimens` (spacing + `sp` text sizes) · `typography` (font files, text sizes) ·
+`shapes` (corner/radius dimens) · `theme` (name, parent, dark flag, items) ·
+`icon` (launcher icon path) · `layouts` (count + file names).
 
 ## Turning tokens into a spec
 
