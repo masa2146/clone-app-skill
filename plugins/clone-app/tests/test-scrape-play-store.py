@@ -25,8 +25,12 @@ def main():
     check("installs", d["installs"] == "1,000,000+")
     check("updated", d["updated"] == "Jun 1, 2026")
     check("source", d["source"] == "google-play")
+    check("description", d["description"] == "An example puzzle app.")
+    check("feature_graphic", d["feature_graphic"] == "https://play-lh.googleusercontent.com/feature.png")
+    check("screenshot count", len(d["screenshot_urls"]) == 2)
+    check("screenshot url", d["screenshot_urls"][0] == "https://play-lh.googleusercontent.com/shot1.png")
     # all expected keys present even if null
-    for k in ["package","title","rating","rating_count","installs","category","developer","updated","source"]:
+    for k in ["package","title","rating","rating_count","installs","category","developer","updated","source","screenshot_urls","feature_graphic","description"]:
         check(f"key present: {k}", k in d)
     sys.exit(1 if fails else 0)
 
