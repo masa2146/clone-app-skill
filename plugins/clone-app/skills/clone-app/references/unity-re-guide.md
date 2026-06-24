@@ -24,6 +24,9 @@ Best case — full logic recovered.
 `unity-assets.sh <apk> <out>` wraps **AssetRipper**
 (https://github.com/AssetRipper/AssetRipper). Extracts textures, sprites, UI
 atlases, fonts, audio, shaders, **scenes, prefabs** → the game's design system.
+Play screenshots are also downloaded to `$WORK/screenshots/` (via
+`scrape-play-store.py`) and are the **primary layout reference** for Unity since
+Android `res/` is absent.
 
 ## Graceful degradation
 
