@@ -105,7 +105,9 @@ Tell the subagent its clone-app scripts dir is
      `bash "$CA/il2cpp-dump.sh" <so> <metadata> "$WORK/unity-out"` and
      `bash "$CA/unity-assets.sh" "$APK" "$WORK/game-assets"`; write
      `$WORK/unity-digest.md` (type model + netcode) per `unity-re-guide.md`.
-   - **Unity (`mono`):** `ilspycmd` the `Managed/*.dll`, plus
+   - **Unity (`mono`):** decompile the managed assemblies with
+     `ilspycmd "$WORK/output/Managed/Assembly-CSharp.dll" -o "$WORK/unity-out"`
+     (repeat for other `Managed/*.dll` of interest; near-source C#), plus
      `bash "$CA/unity-assets.sh" "$APK" "$WORK/game-assets"`; write
      `$WORK/unity-digest.md` per `unity-re-guide.md`.
    - If a Unity tool exits 3 (missing), continue with a partial digest and set
@@ -133,7 +135,7 @@ Read `$WORK/re-summary.txt` (the only RE text in this context). From it you have
 framework, HTTP stack, host counts, endpoint count, key-flow names, secrets
 count, and the RE method. Read `$WORK/re-digest.md` or `$WORK/payloads.json`
 **on demand** when a later phase needs detail. Keep the summary in context for
-Phases 3–7.
+Phases 3–8.
 
 ## Phase 3: Store Analysis
 
