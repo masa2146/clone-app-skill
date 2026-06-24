@@ -10,11 +10,11 @@ must_exist "$P/.claude-plugin/plugin.json"
 must_exist "$P/commands/market-research.md"
 must_exist "$P/README.md"
 must_exist "$P/skills/market-research/SKILL.md"
-for s in fetch-charts.py history.py; do
+for s in fetch-charts.py history.py fetch-play-charts.py play.py trends.py; do
   must_exist "$P/skills/market-research/scripts/$s"
   must_exec  "$P/skills/market-research/scripts/$s"
 done
-for r in research-angles scoring-guide report-template; do
+for r in research-angles scoring-guide report-template numeric-sources; do
   must_exist "$P/skills/market-research/references/$r.md"
 done
 
