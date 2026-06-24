@@ -7,7 +7,8 @@ Falls back to light regex for installs/updated which aren't always in ld+json.
 import sys, json, re, argparse, urllib.request, ssl, subprocess, shutil
 
 KEYS = ["package", "title", "rating", "rating_count", "installs",
-        "category", "developer", "updated", "source"]
+        "category", "developer", "updated", "source",
+        "screenshot_urls", "feature_graphic", "description"]
 
 UA = "Mozilla/5.0"
 
@@ -61,6 +62,21 @@ def parse(html, package):
             if ar.get("ratingCount") is not None:
                 try: out["rating_count"] = int(ar["ratingCount"])
                 except Exception: pass
+            out["description"] = data.get("description")
+            img = data.get("image")
+            if isinstance(img, list):
+                img = img[0] if img else None
+            out["feature_graphic"] = img
+            shots = data.get("screenshot") or []
+            if isinstance(shots, dict):
+                shots = [shots]
+            urls = []
+            for s in shots:
+                if isinstance(s, str):
+                    urls.append(s)
+                elif isinstance(s, dict) and s.get("url"):
+                    urls.append(s["url"])
+            out["screenshot_urls"] = urls
             break
 
     # installs (e.g. "1,000,000+"). Play wraps the count and the "Downloads"
