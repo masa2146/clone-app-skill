@@ -29,5 +29,8 @@ has "$R/logic-capture-guide.md" "extract-logic.py"
 has "$R/logic-capture-guide.md" "confidence"
 has "$R/backend-recon-guide.md" "rebuild"
 has "$R/backend-recon-guide.md" "confidence"
+has "$R/re-digest-contract.md" "logic-digest.md"
+has "$R/re-digest-contract.md" "nav-graph.json"
+has "$R/re-digest-contract.md" "backend-recon.md"
 
 exit $fail
