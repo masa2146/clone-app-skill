@@ -216,27 +216,68 @@ $WORK/clone-report-<YYYY-MM-DD>.md
 
 ## Phase 7: Decision Gate
 
-Ask: "Report saved to `$WORK/clone-report-<date>.md`. Proceed to build the
-implementation plan?"
-- **Yes** → proceed to Phase 8 to assemble the clone build spec, then hand off
-  to `superpowers:writing-plans`.
-- **No** → stop; the report stands on its own.
+Ask: "Feasibility report saved to `$WORK/clone-report-<date>.md`. Proceed to
+build the implementation plan? (This runs the deep **fidelity pass** — full
+API payloads, in-app logic, navigation graph, and an inferred backend design —
+and produces a second report.)"
+- **Yes** → run Phase 8: the fidelity pass, then assemble the build spec and
+  hand off to `superpowers:writing-plans`.
+- **No** → stop; the feasibility report stands on its own. The fidelity pass
+  (and its token cost) is never incurred.
 
-## Phase 8: Assemble the Clone Build Spec
+## Phase 8: Fidelity Pass + Build Spec
+
+Read `${CLAUDE_PLUGIN_ROOT}/skills/clone-app/references/fidelity-pass-guide.md`.
+
+### Phase 8a — Fidelity subagent (deep extraction)
+
+Dispatch one subagent (Agent tool, `general-purpose`). It reuses what Phase 2
+already decompiled to `$WORK/output` — **no re-download, no re-decompile**. Pass
+it `$PKG`, `$WORK`, the clone-app scripts dir `$CA`
+(`${CLAUDE_PLUGIN_ROOT}/skills/clone-app/scripts/`), and the paths to
+`fidelity-pass-guide.md`, `logic-capture-guide.md`, `backend-recon-guide.md`.
+Its instructions:
+
+1. **Full Tier-2 payloads.** Extend `$WORK/payloads.json` so every first-party
+   endpoint carries request/response/headers (third-party stays Tier-1).
+2. **In-app logic.** Run
+   `python3 "$CA/extract-logic.py" "$WORK/output" --out "$WORK/logic-signals.json"`,
+   then write `$WORK/logic-digest.md` per `logic-capture-guide.md`.
+3. **Navigation graph.** Run
+   `python3 "$CA/extract-nav-graph.py" "$WORK/output" --out "$WORK/nav-graph.json"`.
+4. **Backend recon.** Write `$WORK/backend-recon.md` per `backend-recon-guide.md`.
+5. **Unity (if RE Method indicated Unity).** Deepen `$WORK/unity-digest.md` with
+   game mechanics / formulas per `unity-re-guide.md`.
+6. **Return** a short fidelity summary + the artifact paths — never raw sources.
+
+If the subagent fails, retry once; if it still fails, continue with whatever
+artifacts exist and note the gap in the fidelity report.
+
+### Phase 8b — Fidelity report
+
+Write `$WORK/fidelity-report-<YYYY-MM-DD>.md` (actual run date): summarize the
+logic digest, navigation graph, full API surface, and backend recon, each with
+its confidence. This is a standalone report alongside the feasibility one.
+
+### Phase 8c — Build spec
 
 Read `${CLAUDE_PLUGIN_ROOT}/skills/clone-app/references/clone-build-spec-template.md`.
-Assemble `$WORK/clone-build-spec.md` filling every section from the artifacts:
+Assemble `$WORK/clone-build-spec.md`, filling every section from the artifacts:
 - §2 from `$WORK/design-tokens.json` (+ `design-digest.md`),
-- §3 one entry per screen, each paired with `$WORK/screenshots/NN.png`,
-- §5 from `$WORK/payloads.json`, §6 data model from the RE digest,
+- §3 one entry per screen, each paired with `$WORK/screenshots/NN.png`, plus its
+  logic from `$WORK/logic-digest.md`,
+- §3b user-flow diagrams from `$WORK/logic-digest.md`,
+- §4 from `$WORK/nav-graph.json`,
+- §5 from `$WORK/payloads.json` (full Tier-2), §5b + §6 from `$WORK/backend-recon.md`,
 - §7 asset inventory from `$WORK/output` (or `$WORK/game-assets/` for Unity),
 - §8 acceptance criteria per screen + flow,
 - §10 absolute paths to every `$WORK/` artifact.
 Use the **Game variant** sections when RE Method indicated Unity.
 
 Then invoke `superpowers:writing-plans`, passing `$WORK/clone-build-spec.md` as
-the spec (NOT the feasibility report). The build spec is the single standalone
-input — a fresh session with it + `$WORK/` can build the clone.
+the spec and citing BOTH `$WORK/clone-report-<date>.md` and
+`$WORK/fidelity-report-<date>.md` as reference. The build spec + `$WORK/` is the
+standalone input — a fresh session with it can build an exact / near-exact clone.
 
 ## Error Handling Summary
 | Scenario | Action |
@@ -254,3 +295,6 @@ input — a fresh session with it + `$WORK/` can build the clone.
 | Unity build detected | run IL2CPP/Mono branch + AssetRipper |
 | Unity tool missing | continue, partial digest, RE Method `limited: unity-no-tools` |
 | No screenshots on Play | note it, rely on design-tokens + web image search |
+| Phase 7 = No | stop after feasibility report; skip the fidelity pass |
+| Fidelity subagent fails | retry once, then continue with partial artifacts and note the gap |
+| extract-logic/nav-graph finds nothing (Flutter/RN) | note low confidence, lean on screenshots + API contract |

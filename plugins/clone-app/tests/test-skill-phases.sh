@@ -19,5 +19,12 @@ has "clone-build-spec.md"
 has "clone-build-spec-template.md"
 has "unity-re-guide.md"
 has "design-capture-guide.md"
+has "extract-logic.py"
+has "extract-nav-graph.py"
+has "logic-digest.md"
+has "nav-graph.json"
+has "backend-recon.md"
+has "fidelity-report-"
+has "fidelity-pass-guide.md"
 
 exit $fail
