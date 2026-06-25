@@ -60,7 +60,8 @@ Absolute paths to: `design-tokens.json`, `design-digest.md`, `screenshots/`,
 Replace these sections:
 - **§2 Design system** → art style + UI atlas inventory; palette from sprites.
 - **§3 Screen-by-screen** → **scene/prefab-by-scene** spec (from `unity-digest.md`):
-  each scene's objects, UI canvas, transitions; matching screenshot.
+  each scene's objects, UI canvas, transitions; matching screenshot;
+  + game rules / formulas (from `unity-digest.md`).
 - **§5 API contract** → **netcode**: backend (Photon/PlayFab/Mirror/custom),
   message types, sync model (from the IL2CPP/Mono type model).
 - **§7 Asset inventory** → `$WORK/game-assets/` manifest (sprites, atlases,
