@@ -83,3 +83,39 @@ If the fingerprint reports Flutter / React Native / Cordova / Xamarin, set
 available (manifest, strings, hardcoded URLs, SDK list), and leave payloads
 empty where they cannot be recovered. Downstream phases widen the
 uncertainty band accordingly.
+
+## Design & Unity outputs (clone-app additions)
+
+Beyond the three RE files, the Phase 2 subagent ALSO writes:
+
+- `$WORK/design-tokens.json` + `$WORK/design-digest.md` — from
+  `extract-design.py` on the decompile root (standard apps). Schema and
+  confidence rules: see `design-capture-guide.md`.
+- For Unity builds (`detect-unity.sh` → `il2cpp`/`mono`): `$WORK/unity-digest.md`
+  (C# type model + netcode) and `$WORK/game-assets/` + `manifest.json` (via
+  `il2cpp-dump.sh`/`ilspycmd` + `unity-assets.sh`). See `unity-re-guide.md`.
+
+The subagent returns the short `design-summary` (and `unity-summary` when Unity)
+plus these paths — never raw resources, sources, or assets.
+
+### RE Method addition
+| Value | Meaning |
+|---|---|
+| `limited: unity-no-tools` | Unity build but Il2CppInspectorRedux/AssetRipper absent — partial digest, assets/types may be empty. |
+
+## Fidelity pass artifacts (Phase 8 — proceed-to-build only)
+
+When the user proceeds to build at the Phase 7 gate, the Phase 8 fidelity
+subagent reuses `$WORK/output` (no re-decompile) and ALSO writes:
+
+- `$WORK/logic-digest.md` — in-app logic & workflows, distilled from
+  `extract-logic.py`'s signals per `logic-capture-guide.md`.
+- `$WORK/nav-graph.json` — navigation graph from `extract-nav-graph.py`
+  (keys: `root`, `framework`, `nodes[]`, `edges[]`).
+- `$WORK/backend-recon.md` — inferred backend design per `backend-recon-guide.md`
+  (confidence-stamped; a rebuild target, not recovered server code).
+
+It also **deepens `$WORK/payloads.json`**: in the fidelity pass, Tier-2
+request/response/headers are populated for **every first-party endpoint**, not
+just auth/payment/core. This overrides the "Tier-2 on every endpoint is a
+non-goal" rule above, which governs ONLY the Phase 2 feasibility pass.

@@ -26,6 +26,16 @@
 - Integrations: {list}
 - Backend required: {yes/no + why}
 
+## 4a. Design System (Detected)
+- Palette: {key colors} · Type: {fonts + scale} · Theme: {light/dark}
+- Confidence: {high/med/low} (source: APK res + {n} Play screenshots)
+- Full tokens: `$WORK/design-tokens.json`; screenshots: `$WORK/screenshots/`
+
+## 4b. Game Assets (if Unity)
+- Build type: {il2cpp/mono} · Type model: `$WORK/unity-digest.md`
+- Extracted assets: `$WORK/game-assets/` ({n} sprites, {n} scenes, …)
+- Omit this section entirely for non-Unity apps.
+
 ## 5. Effort Estimate (AI-Assisted)
 {effort table from effort-estimation-guide}
 **Total: {min}–{max} AI Sprints** (1 sprint ≈ one focused Claude Code session).
