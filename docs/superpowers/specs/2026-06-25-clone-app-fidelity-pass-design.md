@@ -1,4 +1,4 @@
-# clone-app Fidelity Mode — Design
+# clone-app Fidelity Pass — Design
 
 **Date:** 2026-06-25
 **Status:** Approved design, pre-implementation
@@ -15,18 +15,23 @@ does not care about pricing or a verdict. They want to **extract and replicate
 an app or game in high fidelity** — its workflows (iş akışları), its designs,
 its in-app/business logic, and, where it can be inferred, its backend design.
 
-This spec adds a **fidelity mode** to `clone-app`. The mode reorients the skill
-from "should I clone this and what will it cost" toward "capture everything
-needed to rebuild this faithfully." Feasibility remains the default behavior;
-fidelity is opt-in and does not break the existing path.
+This spec adds a **fidelity pass** to `clone-app`, producing a second standalone
+report alongside the feasibility one. There is no mode flag. Feasibility runs as
+today and yields its report; when the user proceeds to build a plan (the Phase 7
+decision gate), a deep fidelity pass runs and yields a fidelity report, and the
+generated implementation plan references **both** reports. The plan is the build
+contract: executed in a fresh session it must rebuild the target **exactly or
+very close**.
 
 ## 2. Scope
 
 **In scope (Phase A — static deep extraction):**
-- A fidelity mode toggle that skips the feasibility phases and deepens the
-  extraction phases.
+- A deep fidelity pass, triggered at the Phase 7 decision gate when the user
+  proceeds to build a plan — no mode flag, no env var. It runs over the sources
+  Phase 2 already decompiled (no re-decompile) and yields a standalone fidelity
+  report alongside the existing feasibility report.
 - Full Tier-2 payload extraction across **all first-party endpoints** (not just
-  the auth/payment/core trio the feasibility path limits itself to).
+  the auth/payment/core trio the feasibility pass limits itself to).
 - New extraction of **in-app logic / workflows** (ViewModels, use-cases,
   validation rules, state machines, local DB schema, game formulas).
 - New extraction of the **real navigation graph** (not inferred).
@@ -40,8 +45,8 @@ fidelity is opt-in and does not break the existing path.
   the planned follow-on, but is **not** part of this spec.
 
 **Hard constraints (unchanged from repo rules):**
-- `plugins/android-reverse-engineering/` stays byte-identical. The fidelity mode
-  reuses its scripts/skill exactly as the feasibility path does; it adds nothing
+- `plugins/android-reverse-engineering/` stays byte-identical. The fidelity pass
+  reuses its scripts/skill exactly as the feasibility flow does; it adds nothing
   to that tree.
 - All new helper scripts are stdlib-only Python or bash 4+, offline-testable
   against `tests/fixtures/`, never hitting the network.
@@ -62,40 +67,50 @@ does not over-promise:
 
 The user's chosen targets — **native apps and Unity games** — are precisely the
 two where static logic extraction is strongest. Flutter/RN apps fall back to a
-`limited:` digest, same as the feasibility path.
+`limited:` digest, same as the feasibility pass.
 
 ## 4. Design
 
-### 4.1 Mode shape
+### 4.1 Two reports, no mode flag
 
-A mode selector resolved in Phase 0:
+There is **no** `CLONE_APP_MODE` env var and no toggle. The skill runs its
+existing feasibility flow start to finish and produces the feasibility report.
+The deep fidelity pass is **triggered by the Phase 7 decision gate** — the same
+"proceed to build a plan?" question the skill already asks:
 
-- `CLONE_APP_MODE=fidelity` environment variable, **or** user intent phrased as
-  "detailed clone / replicate in detail / klon planı" → `fidelity`.
-- Otherwise → `feasibility` (the existing default; unchanged).
+- **Phase 7 = No** → the feasibility report stands alone. Done. No fidelity
+  cost paid.
+- **Phase 7 = Yes** → Phase 8 runs the deep fidelity pass, produces a standalone
+  **fidelity report**, assembles the build spec from the deep artifacts, and
+  hands off to `writing-plans`. The generated plan references **both** reports.
 
-Phase behavior by mode:
+The fidelity pass reuses what Phase 2 already decompiled to `$WORK/output` — it
+does **not** re-download or re-decompile. Phase 2 stays as today (feasibility
+depth: Tier-2 on the auth/payment/core trio); the deepening happens in Phase 8.
 
-| Phase | feasibility (default) | fidelity |
-|---|---|---|
-| 0 Input | as today | + resolve mode |
-| 1 Download | as today | as today |
-| 2 RE | shallow (Tier-2 on 3 flows) | **deep** (Tier-2 all first-party + logic + nav + backend recon) |
-| 3 Store | metrics + screenshots + iOS check | **screenshots only** (visual ground truth); skip metrics/iOS |
-| 4 Stack | choose stack | choose stack (shared — the rebuild target) |
-| 5 Effort/Cost | AI-Sprint + infra tables | **skipped** |
-| 6 Viability | GO/NO-GO report | **skipped** |
-| 7 Decision gate | proceed to plan? | proceed to plan? (shared) |
-| 8 Build spec | standard template | **fidelity variant** |
+Phase behavior:
 
-Screenshots are retained in fidelity mode because they are the visual source of
-truth for design replication; store metrics, iOS presence, effort, cost, and the
-verdict are all feasibility concerns and are dropped.
+| Phase | Behavior |
+|---|---|
+| 0 Input | as today |
+| 1 Download | as today |
+| 2 RE | as today — feasibility-depth digest (Tier-2 on 3 flows) over `$WORK/output` |
+| 3 Store | as today — metrics + screenshots + iOS check (screenshots feed both reports) |
+| 4 Stack | choose stack (the rebuild target) |
+| 5 Effort/Cost | as today |
+| 6 Viability | feasibility report → `clone-report-<date>.md` |
+| 7 Decision gate | proceed to build a plan? — **this gates the fidelity pass** |
+| 8 Build spec | on Yes: **deep fidelity pass** over `$WORK/output` → `fidelity-report-<date>.md` + fidelity build spec → `writing-plans`, plan references both reports |
+
+Two standalone outputs: `clone-report-<date>.md` (feasibility) and
+`fidelity-report-<date>.md` (deep extraction). The plan cites both; together with
+`$WORK/` they are the build contract for an exact / near-exact clone.
 
 ### 4.2 New and deepened artifacts
 
-All produced by the Phase 2 subagent in its isolated context (so deep extraction
-never floods the orchestrator), written under `$WORK/`:
+All produced by a **Phase 8 fidelity subagent** in its isolated context (so deep
+extraction never floods the orchestrator), reading the sources Phase 2 already
+decompiled to `$WORK/output`, written under `$WORK/`:
 
 | Artifact | State | Content |
 |---|---|---|
@@ -133,8 +148,9 @@ contract — a fresh session with it + `$WORK/` rebuilds the clone.
 
 ### 5.2 New references / rubrics (`skills/clone-app/references/`)
 
-- `fidelity-mode-guide.md` — single source for what the mode skips/adds and the
-  branch table; SKILL.md points here rather than duplicating prose.
+- `fidelity-pass-guide.md` — single source for what the Phase 8 fidelity pass
+  does (the deep-extraction steps + the new artifacts + the two-report model);
+  SKILL.md points here rather than duplicating prose.
 - `logic-capture-guide.md` — how the subagent distills in-app logic, with
   framework-aware confidence (native/Compose/Unity-mono high–med; Flutter/RN
   low).
@@ -144,13 +160,15 @@ contract — a fresh session with it + `$WORK/` rebuilds the clone.
 
 ### 5.3 Changed files
 
-- `SKILL.md` — Phase 0 mode resolution; Phase 2b deep-extraction subagent
-  instructions; Phase 3 screenshot-only branch; skip Phase 5/6 in fidelity;
-  Phase 8 fidelity-variant selection. Error-handling table gains fidelity rows.
-- `re-digest-contract.md` — fidelity adds Tier-2-on-all-first-party and the
-  contract for the three new artifacts (`logic-digest.md`, `nav-graph.json`,
-  `backend-recon.md`). The existing Tier-2-only-on-3-flows rule stays the
-  documented feasibility behavior.
+- `SKILL.md` — Phase 7 gate triggers the fidelity pass on Yes; Phase 8 gains the
+  deep fidelity subagent (full Tier-2 + logic + nav + backend recon over
+  `$WORK/output`), writes `fidelity-report-<date>.md`, assembles the fidelity
+  build spec, and passes both reports to `writing-plans`. Phases 0–6 unchanged.
+  Error-handling table gains fidelity-pass rows.
+- `re-digest-contract.md` — documents the Phase 8 fidelity artifacts
+  (`logic-digest.md`, `nav-graph.json`, `backend-recon.md`) and the
+  Tier-2-on-all-first-party rule for the fidelity pass. The existing
+  Tier-2-only-on-3-flows rule stays the documented Phase 2 feasibility behavior.
 - `clone-build-spec-template.md` — the new/extended sections in §4.3.
 - `unity-re-guide.md` — game-mechanic / formula extraction depth.
 
@@ -171,7 +189,7 @@ tests with `set -uo pipefail` aggregating failures, stdlib-only Python.
 | `test-extract-logic.py` | Against a fixture decompile tree (1 ViewModel + 1 Room entity + 1 state enum), the expected logic signals are surfaced |
 | `test-extract-nav-graph.py` | Against a fixture nav XML + Activity set, the correct node/edge graph JSON is produced |
 | `smoke-structure.sh` (update) | New scripts present + executable; new references present; emitted JSON valid |
-| `test-skill-content.sh` (new or extended) | SKILL.md contains the mode resolution and the fidelity branch wiring |
+| `test-skill-content.sh` (new or extended) | SKILL.md wires the Phase 7 gate to the Phase 8 fidelity pass and the two-report output |
 | `run-all.sh` (update) | Registers the new suites |
 
 New fixtures: a minimal decompile tree (one ViewModel, one Room entity, one
@@ -180,15 +198,17 @@ state enum) and a minimal `navigation/nav.xml` + Activity references. No network
 ## 7. Risks & mitigations
 
 - **Token cost of Tier-2-on-all-endpoints.** Mitigated by running it inside the
-  Phase 2 subagent's isolated context; only the digest summary returns to the
-  orchestrator. The `re-digest-contract.md` warning about token cost applies to
-  the feasibility path and is explicitly overridden only in fidelity mode.
+  Phase 8 fidelity subagent's isolated context; only the digest summary returns
+  to the orchestrator. It is also paid only when the user proceeds to build at
+  the Phase 7 gate — feasibility-only runs never incur it. The
+  `re-digest-contract.md` warning about token cost applies to the Phase 2
+  feasibility pass and is explicitly overridden for the fidelity pass.
 - **Over-promising backend fidelity.** Mitigated by confidence-stamping every
   inference in `backend-recon.md` and framing it as a rebuild target, not
   recovered server code (§3).
 - **Flutter/RN low yield.** Same `limited:` framework guard as today; the
   fidelity digest says so and leans on screenshots + whatever signals exist.
-- **Legal.** The existing legal note in SKILL.md still governs; fidelity mode
+- **Legal.** The existing legal note in SKILL.md still governs; the fidelity pass
   does not change the authorization requirement and the same "recreate in style,
   treat extracted assets as reference" stance applies.
 
@@ -197,4 +217,4 @@ state enum) and a minimal `navigation/nav.xml` + Activity references. No network
 Dynamic analysis — emulator + `mitmproxy` (real traffic) + `frida` (runtime
 hooks, decrypted payloads, observed transitions) — is the planned next increment
 for true runtime-observed workflow and backend fidelity. It will land as its own
-spec once the static deep-extraction mode in this spec is in place.
+spec once the static deep-extraction pass in this spec is in place.
