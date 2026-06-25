@@ -21,5 +21,13 @@ has "$R/re-digest-contract.md" "design-tokens.json"
 has "$R/re-digest-contract.md" "unity-digest.md"
 has "$R/report-template.md" "Design System"
 has "$R/report-template.md" "Game Assets"
+has "$R/fidelity-pass-guide.md" "fidelity-report"
+has "$R/fidelity-pass-guide.md" "logic-digest.md"
+has "$R/fidelity-pass-guide.md" "nav-graph.json"
+has "$R/fidelity-pass-guide.md" "backend-recon.md"
+has "$R/logic-capture-guide.md" "extract-logic.py"
+has "$R/logic-capture-guide.md" "confidence"
+has "$R/backend-recon-guide.md" "rebuild"
+has "$R/backend-recon-guide.md" "confidence"
 
 exit $fail
