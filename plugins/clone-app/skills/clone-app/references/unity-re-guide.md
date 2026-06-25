@@ -38,3 +38,18 @@ then writes a partial `unity-digest.md` and sets `RE Method: limited: unity-no-t
 Extracted game art is copyrighted. Outside authorized use (own game, lawful
 research), treat extracted assets as **reference only** and recreate in the same
 style — do not ship them.
+
+## Game mechanics & formulas (fidelity pass)
+
+In the Phase 8 fidelity pass, deepen `$WORK/unity-digest.md` beyond the type
+model + netcode to capture the playable rules:
+
+- **Game mechanics** — core loop, win/lose conditions, level/wave progression,
+  player/enemy state machines (from the C# `MonoBehaviour` methods).
+- **Formulas** — damage/score/economy/cooldown calculations, drop rates, curve
+  tables (constants and arithmetic in the decompiled C#).
+- **Tunables** — `ScriptableObject` configs and serialized fields that balance
+  the game.
+
+Confidence: Unity **mono** is near-source (high); **il2cpp** gives signatures +
+partial bodies (med). State the level reached.
