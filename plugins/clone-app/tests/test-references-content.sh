@@ -36,5 +36,6 @@ has "$R/clone-build-spec-template.md" "User-flow diagrams"
 has "$R/clone-build-spec-template.md" "Backend rebuild spec"
 has "$R/clone-build-spec-template.md" "nav-graph.json"
 has "$R/clone-build-spec-template.md" "logic-digest.md"
+has "$R/unity-re-guide.md" "Game mechanics"
 
 exit $fail
