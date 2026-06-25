@@ -32,5 +32,9 @@ has "$R/backend-recon-guide.md" "confidence"
 has "$R/re-digest-contract.md" "logic-digest.md"
 has "$R/re-digest-contract.md" "nav-graph.json"
 has "$R/re-digest-contract.md" "backend-recon.md"
+has "$R/clone-build-spec-template.md" "User-flow diagrams"
+has "$R/clone-build-spec-template.md" "Backend rebuild spec"
+has "$R/clone-build-spec-template.md" "nav-graph.json"
+has "$R/clone-build-spec-template.md" "logic-digest.md"
 
 exit $fail

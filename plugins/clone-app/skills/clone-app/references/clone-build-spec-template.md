@@ -15,18 +15,31 @@ scale (fonts + sizes), spacing scale, corner radii, light/dark theme. Note where
 confidence is med/low and screenshots are the source of truth.
 
 ## 3. Screen-by-screen spec
-For **each** screen: purpose · layout · components · states (empty/loading/error)
-· navigation in/out · matching screenshot (`$WORK/screenshots/NN.png`).
+For **each** screen: purpose · layout **component tree** (from native XML) ·
+components · states (empty/loading/error) · navigation in/out · the screen's
+logic (cross-ref `$WORK/logic-digest.md`) · matching screenshot
+(`$WORK/screenshots/NN.png`).
+
+## 3b. User-flow diagrams
+Step-by-step flows (onboarding, core loop, payment) from `$WORK/logic-digest.md`:
+each step's screen, the action that advances it, and the API call it triggers.
 
 ## 4. Navigation map / IA
-The full screen graph + entry points.
+The full screen graph + entry points, generated from `$WORK/nav-graph.json`
+(nodes = screens, edges = transitions + triggers) — not inferred.
 
 ## 5. API contract
 From `$WORK/payloads.json`: per endpoint — host, method, path, auth,
 request body, response shape, headers.
 
+## 5b. Backend rebuild spec
+The from-scratch backend design from `$WORK/backend-recon.md`: per-endpoint
+behavior, auth flow, inferred server-side validation. Confidence-stamped — this
+is a rebuild target, not recovered server code.
+
 ## 6. Data model
-Entities, fields, relationships (from payloads + RE digest).
+Entities, fields, relationships from `$WORK/backend-recon.md` (observed vs
+inferred, each confidence-stamped).
 
 ## 7. Asset inventory
 Icons, fonts, drawables — extract from `$WORK/output` or recreate. List each.
