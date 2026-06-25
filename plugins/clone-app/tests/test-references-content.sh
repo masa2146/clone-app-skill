@@ -1,0 +1,41 @@
+#!/usr/bin/env bash
+set -uo pipefail
+HERE="$(cd "$(dirname "$0")" && pwd)"
+R="$HERE/../skills/clone-app/references"
+fail=0
+has() { # file substring
+  if grep -qF "$2" "$1" 2>/dev/null; then echo "PASS: $(basename "$1") has '$2'"
+  else echo "FAIL: $(basename "$1") missing '$2'"; fail=1; fi
+}
+
+has "$R/design-capture-guide.md" "design-tokens.json"
+has "$R/design-capture-guide.md" "confidence"
+has "$R/design-capture-guide.md" "screenshots"
+has "$R/unity-re-guide.md" "Il2CppInspectorRedux"
+has "$R/unity-re-guide.md" "AssetRipper"
+has "$R/unity-re-guide.md" "ilspycmd"
+has "$R/clone-build-spec-template.md" "Screen-by-screen"
+has "$R/clone-build-spec-template.md" "Acceptance criteria"
+has "$R/clone-build-spec-template.md" "Game variant"
+has "$R/re-digest-contract.md" "design-tokens.json"
+has "$R/re-digest-contract.md" "unity-digest.md"
+has "$R/report-template.md" "Design System"
+has "$R/report-template.md" "Game Assets"
+has "$R/fidelity-pass-guide.md" "fidelity-report"
+has "$R/fidelity-pass-guide.md" "logic-digest.md"
+has "$R/fidelity-pass-guide.md" "nav-graph.json"
+has "$R/fidelity-pass-guide.md" "backend-recon.md"
+has "$R/logic-capture-guide.md" "extract-logic.py"
+has "$R/logic-capture-guide.md" "confidence"
+has "$R/backend-recon-guide.md" "rebuild"
+has "$R/backend-recon-guide.md" "confidence"
+has "$R/re-digest-contract.md" "logic-digest.md"
+has "$R/re-digest-contract.md" "nav-graph.json"
+has "$R/re-digest-contract.md" "backend-recon.md"
+has "$R/clone-build-spec-template.md" "User-flow diagrams"
+has "$R/clone-build-spec-template.md" "Backend rebuild spec"
+has "$R/clone-build-spec-template.md" "nav-graph.json"
+has "$R/clone-build-spec-template.md" "logic-digest.md"
+has "$R/unity-re-guide.md" "Game mechanics"
+
+exit $fail
