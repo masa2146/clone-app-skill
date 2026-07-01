@@ -1,0 +1,4 @@
+[
+  { "host": "api.acme.com", "method": "POST", "path": "/login" },
+  { "host": "api.acme.com", "method": "GET",  "path": "/notes" }
+]
