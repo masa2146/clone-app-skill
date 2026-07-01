@@ -1,0 +1,7 @@
+{
+  "nodes": [
+    { "id": "login", "label": "Login" },
+    { "id": "home",  "label": "Home" }
+  ],
+  "edges": [ { "from": "login", "to": "home", "trigger": "tap_login" } ]
+}
