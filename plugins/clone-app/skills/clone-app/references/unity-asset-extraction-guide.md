@@ -135,6 +135,22 @@ meshes called `BezierCurve.041`. So discovery is **structural first**:
    (`transforms` in the same file); a camera FOV may be refit at runtime by a script — read its
    fields in `scripts/` before blaming the geometry.
 
+**Screens** are rebuilt the same way (`templates/ImportUI.cs`, needs com.unity.ugui):
+`-executeMethod ImportUI.SetupBatch` once (imports TextMeshPro essentials; it finishes after
+the call, so it is its own step), then `ImportUI.BuildBatch -cloneSource <game-assets>
+-cloneCanvases A,B -cloneTexts texts-<locale>.json`. Each node gets the recorded
+RectTransform (rotation included; a plain Transform inside a canvas is placed as a point),
+the Image's bound sprite imported with its pixels-per-unit, pivot and 9-slice border, the
+label's text, font (a dynamic TMP asset from the shipped TTF/OTF; `X_Variant SDF` maps to
+font `X`), size, spacing, alignment and its material preset's outline. `ui-localize.py
+<game-assets> --locale tr` maps each label to its string through the decoded Unity
+Localization tables (keys referenced by id or by name). `expected-ui.py` computes every
+node's canvas box, sprite and text in Python; `ImportUI.VerifyBatch` measures the built
+canvas in Unity's own layout. `ImportUI.RenderBatch` renders a canvas at the target screen
+size (`-cloneTransparent` to lay it over a 3D render). What a render will still differ in is
+state the game sets while running: counters, a level number, a booster's lock, a platform-
+only button, a label filled by code instead of a localization event.
+
 Skinned meshes are posed by their skeleton at extraction (`skin_baked` on the node): a
 SkinnedMeshRenderer's vertices are in bind space, and drawn as a plain mesh at the node they
 float away from where the game shows them. Unity primitives (`builtin_mesh`) and

@@ -65,4 +65,13 @@ check("bound sprite reported as fact", close_row["sprite"] == "close_x" and clos
 check("px box on the 1080x2400 screen (top-left origin)", close_row["px"] == "948,24,120x60")
 check("painted size = alpha box inside the rect", close_row["painted_px"] == "96x48")
 
+rot = {"rect": {"anchorMin": [0.5, 0.5], "anchorMax": [0.5, 0.5], "pivot": [0.5, 0.5],
+                "anchoredPosition": [0, 0], "sizeDelta": [100, 50], "localScale": [1, 1, 1],
+                "localRotation": [0, 0, 0.7071068, 0.7071068]}}
+_, rbox = gm.place(rot, root)
+check("a node turned 90 degrees swaps its drawn width and height", close(rbox[2:], (50, 100)))
+mir = dict(rot, rect=dict(rot["rect"], localRotation=[0, 0, 0, 1], localScale=[-1, 1, 1]))
+_, mbox = gm.place(mir, root)
+check("a mirrored node (scale -1) keeps its box", close(mbox, (400, 975, 100, 50)))
+
 sys.exit(1 if fails else 0)

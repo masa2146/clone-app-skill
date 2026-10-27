@@ -218,6 +218,8 @@ Tell the subagent its clone-app scripts dir is
      **Rebuilds are proven, not eyeballed:** `unity-asset-extraction-guide.md` → "Proving a
      rebuild" (expected-import.py + VerifyImport.cs node by node, RenderLayout.cs next to a
      real screenshot). Hand the clone-build phase the verify report with the prefabs.
+     Screens likewise: `ImportUI.cs` + `ui-localize.py` + `expected-ui.py` rebuild and prove
+     each canvas; a screen is built from the data, not measured off a screenshot.
      Read `$WORK/extracted/game-assets/IMPORT.md`, `manifest.json` and
      `project-settings/README.md` — never the extracted files themselves.
      The output contract is `unity-asset-extraction-guide.md`.
