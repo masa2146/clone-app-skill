@@ -4,7 +4,7 @@
 Primary source is the embedded ld+json SoftwareApplication block (stable).
 Falls back to light regex for installs/updated which aren't always in ld+json.
 """
-import sys, json, re, argparse, urllib.request, ssl, subprocess, shutil
+import sys, os, json, re, argparse, urllib.request, urllib.error, ssl, subprocess, shutil
 
 KEYS = ["package", "title", "rating", "rating_count", "installs",
         "category", "developer", "updated", "source",
@@ -31,6 +31,40 @@ def _http_get(url):
         if out.returncode != 0:
             raise
         return out.stdout.decode("utf-8", "replace")
+
+def _http_get_bytes(url):
+    """Binary GET with the same curl fallback as _http_get (macOS' python.org
+    Python has no CA bundle until 'Install Certificates.command' is run)."""
+    req = urllib.request.Request(url, headers={"User-Agent": UA})
+    try:
+        with urllib.request.urlopen(req, timeout=60) as r:
+            return r.read()
+    except urllib.error.URLError as e:
+        if not isinstance(e.reason, ssl.SSLError) or not shutil.which("curl"):
+            raise
+        out = subprocess.run(["curl", "-sL", "--fail", "-A", UA, url], capture_output=True, timeout=120)
+        if out.returncode != 0:
+            raise
+        return out.stdout
+
+
+def download_screenshots(play_json, outdir):
+    """Save play.json's screenshot_urls as NN.png + manifest.json; returns the count."""
+    os.makedirs(outdir, exist_ok=True)
+    urls = (json.load(open(play_json)).get("screenshot_urls") or [])
+    man = []
+    for i, u in enumerate(urls, 1):
+        dest = os.path.join(outdir, f"{i:02d}.png")
+        try:
+            with open(dest, "wb") as f:
+                f.write(_http_get_bytes(u))
+            man.append({"order": i, "url": u, "path": dest})
+        except Exception as e:  # noqa: BLE001 — one missing image must not stop the rest
+            print(f"WARN: screenshot {i} failed: {e}", file=sys.stderr)
+    with open(os.path.join(outdir, "manifest.json"), "w") as f:
+        json.dump(man, f, indent=2)
+    return len(man)
+
 
 def fetch(package):
     url = f"https://play.google.com/store/apps/details?id={package}&hl=en&gl=US"
@@ -99,9 +133,16 @@ def parse(html, package):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("package")
+    ap.add_argument("package", nargs="?")
     ap.add_argument("--html-file")
+    ap.add_argument("--screenshots", nargs=2, metavar=("PLAY_JSON", "OUT_DIR"),
+                    help="download play.json's screenshots into OUT_DIR")
     args = ap.parse_args()
+    if args.screenshots:
+        print(f"saved {download_screenshots(*args.screenshots)} screenshots")
+        return
+    if not args.package:
+        ap.error("package is required")
 
     if args.html_file:
         with open(args.html_file, encoding="utf-8") as f:

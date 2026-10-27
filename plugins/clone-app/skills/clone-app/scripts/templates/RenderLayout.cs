@@ -32,6 +32,9 @@ public static class RenderLayout
         var outPath = MiniJson.Str(L, "out") ?? "layout.png";
         var prefabDir = MiniJson.Str(L, "prefabs") ?? "Assets/Extracted/Prefabs";
 
+        // SRP Batcher painted a URP scene one flat colour once an incompatible material
+        // joined it; a verification frame trades batching for correctness
+        UnityEngine.Rendering.GraphicsSettings.useScriptableRenderPipelineBatching = false;
         var scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
         var missing = new SortedDictionary<string, int>();
         int placed = 0;

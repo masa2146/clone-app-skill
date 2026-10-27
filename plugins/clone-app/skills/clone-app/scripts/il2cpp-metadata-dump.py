@@ -254,6 +254,78 @@ class Metadata:
         return out
 
 
+
+# --- v38+ (Unity 6.x) -------------------------------------------------------
+# Headers become {offset, size, count} triples and index widths shrink with the
+# table counts, so the v31 pair header and fixed struct sizes misalign every
+# table (a Unity 6 game dumped 102 of its 23,873 types). Section order and the
+# type-record columns were verified on a shipped v39 title; self_check() asserts
+# that type, field, method and property counts tile their sections exactly, so a
+# title whose index widths differ fails loudly instead of dumping garbage.
+SEC_V39 = {"strings": 2, "events": 3, "properties": 4, "methods": 5,
+           "field_defaults": 7, "fields": 11, "types": 19, "images": 20}
+TYPE_COLS_V39 = {"nameIndex": (0, "i"), "nsIndex": (4, "i"), "parentIndex": (16, "i"),
+                 "flags": (22, "I"), "fieldStart": (26, "i"), "methodStart": (30, "i"),
+                 "eventStart": (34, "i"), "propStart": (38, "i"),
+                 "methodCount": (58, "H"), "propCount": (60, "H"), "fieldCount": (62, "H"),
+                 "token": (78, "I")}
+SZ_TYPE_V39, SZ_IMAGE_V39 = 82, 36
+
+
+class MetadataV38(Metadata):
+    def _read_header(self):
+        first = struct.unpack_from("<i", self.d, 8)[0]
+        return [struct.unpack_from("<iii", self.d, i) for i in range(8, first, 12)]
+
+    def _locate(self):
+        global SZ_FIELD, SZ_METHOD, SZ_PROP
+        S = self.sections
+        self.str_off, self.str_size, _ = S[SEC_V39["strings"]]
+        es = {k: (S[v][1] // S[v][2] if S[v][2] else 0) for k, v in SEC_V39.items()}
+        self.tables = {k: (S[v][0], S[v][1]) for k, v in SEC_V39.items() if k != "strings"}
+        self.type_count = S[SEC_V39["types"]][2]
+        if es["types"] != SZ_TYPE_V39:
+            raise ValueError(f"v{self.version}: type record is {es['types']} bytes, this reader "
+                             f"knows {SZ_TYPE_V39} — index widths differ; extend MetadataV38")
+        SZ_FIELD, SZ_METHOD, SZ_PROP = es["fields"], es["methods"], es["properties"]
+
+    def type_raw(self, i):
+        base = self.tables["types"][0] + i * SZ_TYPE_V39
+        return {k: struct.unpack_from("<" + f, self.d, base + o)[0] for k, (o, f) in TYPE_COLS_V39.items()}
+
+    def images(self):
+        off, size = self.tables["images"]
+        out = []
+        for k in range(size // SZ_IMAGE_V39):
+            ni, = struct.unpack_from("<i", self.d, off + k * SZ_IMAGE_V39)
+            ts, tc = struct.unpack_from("<HI", self.d, off + k * SZ_IMAGE_V39 + 8)
+            nm = self.s(ni)
+            if nm:
+                out.append({"name": nm, "typeStart": ts, "typeCount": tc})
+        return out
+
+    def self_check(self):
+        imgs = self.images()
+        if sum(i["typeCount"] for i in imgs) != self.type_count:
+            raise ValueError("v38+ reader: image type ranges do not cover all types")
+        S = self.sections
+        for key, sec in (("fieldCount", "fields"), ("methodCount", "methods"), ("propCount", "properties")):
+            tot = sum(self.type_raw(i)[key] for i in range(self.type_count))
+            if tot != S[SEC_V39[sec]][2]:
+                raise ValueError(f"v38+ reader: {key} sums to {tot}, section holds {S[SEC_V39[sec]][2]}")
+
+
+def open_metadata(path):
+    """The reader for this file's metadata version."""
+    with open(path, "rb") as f:
+        head = f.read(8)
+    version = struct.unpack_from("<i", head, 4)[0] if len(head) == 8 else 0
+    if version >= 38:
+        md = MetadataV38(path)
+        md.self_check()
+        return md
+    return Metadata(path)
+
 def build_surface(md, only_assemblies=None):
     images = md.images()
     type_asm = {}
@@ -337,7 +409,7 @@ def main(argv=None):
     ap.add_argument("--quiet", action="store_true")
     args = ap.parse_args(argv)
 
-    md = Metadata(args.metadata)
+    md = open_metadata(args.metadata)
     only = set(a.strip() for a in args.assemblies.split(",")) if args.assemblies else None
     surface, stats = build_surface(md, only)
 

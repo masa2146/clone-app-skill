@@ -447,7 +447,10 @@ public class ImportExtracted : EditorWindow
         {
             var tex = AssetDatabase.LoadAssetAtPath<Texture2D>(dir + "/" + kv.Value.Replace("\\", "/"));
             if (tex == null) continue;
-            var slot = mat.HasProperty(kv.Key) ? kv.Key
+            // URP/Lit keeps a hidden _MainTex that it rewrites from _BaseMap on save, so a
+            // texture written to _MainTex vanished and a whole URP city rendered white
+            var slot = kv.Key == "_MainTex" && mat.HasProperty("_BaseMap") ? "_BaseMap"
+                : mat.HasProperty(kv.Key) ? kv.Key
                 : (kv.Key == "_MainTex" || kv.Key == "_BaseMap")
                     ? (mat.HasProperty("_BaseMap") ? "_BaseMap" : "_MainTex") : null;
             if (slot != null) mat.SetTexture(slot, tex);
@@ -456,7 +459,9 @@ public class ImportExtracted : EditorWindow
         // _Color written after it painted a gold lock grey
         foreach (var kv in mi.colors.OrderBy(c => c.Key == "_BaseColor" ? 1 : 0))
         {
-            var slot = mat.HasProperty(kv.Key) ? kv.Key
+            // the same for the hidden _Color, synced from _BaseColor on save
+            var slot = kv.Key == "_Color" && mat.HasProperty("_BaseColor") ? "_BaseColor"
+                : mat.HasProperty(kv.Key) ? kv.Key
                 : kv.Key == "_BaseColor" && mat.HasProperty("_Color") ? "_Color"
                 : kv.Key == "_Color" && mat.HasProperty("_BaseColor") ? "_BaseColor" : null;
             if (slot != null) mat.SetColor(slot, kv.Value);

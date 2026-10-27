@@ -220,6 +220,30 @@ Tell the subagent its clone-app scripts dir is
      real screenshot). Hand the clone-build phase the verify report with the prefabs.
      Screens likewise: `ImportUI.cs` + `ui-localize.py` + `expected-ui.py` rebuild and prove
      each canvas; a screen is built from the data, not measured off a screenshot.
+     Run every Unity step through `bash "$CA/unity-batch.sh" <project> <log> <Class.Method> …`
+     (`--gpu` for renders) and fetch reference footage with `"$CA/fetch-reference-video.sh"`.
+
+   **Known traps (each cost a live run hours — do not rediscover them):**
+   - `libunity.so` / `libil2cpp.so` in the package = Unity, whatever the RE fingerprint says
+     (it has labelled a Unity game "native Compose").
+   - Extract only through `unity-assets.sh`: it builds the venv with TypeTreeGeneratorAPI.
+     Copying `unity-extract.py` and running it on the system python decodes no scene script.
+   - global-metadata v38+ (Unity 6.x): `il2cpp-metadata-dump.py` reads it (self-checked).
+     TypeTreeGeneratorAPI 0.0.10 cannot load it yet, so scene MonoBehaviours stay
+     header-only; scripts inside asset bundles still decode from their own type trees
+     (often the tuning tables and most UI). Say which in the digest.
+   - Part of the content may be remote (Addressables RemoteLoadPath / Unity CCD): classify
+     catalog bundles local vs remote before calling anything missing.
+   - Level/map files are not always named `level_N`: `text/index.json` flags JSON TextAssets
+     that look like level data by content (`level_like`).
+   - zsh does not split `"$ARGS"`: build Unity command lines with `unity-batch.sh`, never in
+     a variable. The upstream `find-api-calls.sh --urls` breaks on BSD awk: grep the
+     metadata string literals and smali for `https?://` instead.
+   - URP projects: albedo goes to `_BaseMap`/`_BaseColor` (URP rewrites hidden `_MainTex`
+     and `_Color` on save — the importer handles it); verification renders turn SRP Batcher
+     off (a single incompatible material painted a whole scene one colour).
+   - Store screenshots show gameplay only: menu, result and tutorial screens come from a
+     gameplay video — check its resolution (`fetch-reference-video.sh` warns under 720p).
      Read `$WORK/extracted/game-assets/IMPORT.md`, `manifest.json` and
      `project-settings/README.md` — never the extracted files themselves.
      The output contract is `unity-asset-extraction-guide.md`.
@@ -368,23 +392,9 @@ If Play scrape returned mostly nulls (page layout changed), fall back to a web
 search for the app's metrics and note the source. App Store absence is fine —
 continue with Google Play data only.
 
-Download the screenshots for visual ground truth:
+Download the screenshots for visual ground truth (curl fallback on SSL trust errors):
 ```bash
-mkdir -p "$WORK/extracted/store/screenshots"
-python3 - "$WORK/extracted/store/play.json" "$WORK/extracted/store/screenshots" <<'PY'
-import json, sys, os, urllib.request
-play, outdir = sys.argv[1], sys.argv[2]
-urls = (json.load(open(play)).get("screenshot_urls") or [])
-man = []
-for i, u in enumerate(urls, 1):
-    dest = os.path.join(outdir, f"{i:02d}.png")
-    try:
-        urllib.request.urlretrieve(u, dest); man.append({"order": i, "url": u, "path": dest})
-    except Exception as e:
-        print(f"WARN: screenshot {i} failed: {e}", file=sys.stderr)
-json.dump(man, open(os.path.join(outdir, "manifest.json"), "w"), indent=2)
-print(f"saved {len(man)} screenshots")
-PY
+python3 "${CLAUDE_PLUGIN_ROOT}/skills/clone-app/scripts/scrape-play-store.py" --screenshots "$WORK/extracted/store/play.json" "$WORK/extracted/store/screenshots"
 ```
 If `screenshot_urls` is null/empty (layout change), note it and rely on
 `design-tokens.json` + a web image search for visual reference.
