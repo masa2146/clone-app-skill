@@ -1816,7 +1816,19 @@ class Extractor:
                 "anchoredPosition": _vec(getattr(rt, "m_AnchoredPosition", None), ("x", "y")),
                 "sizeDelta": _vec(getattr(rt, "m_SizeDelta", None), ("x", "y")),
                 "localScale": _vec(getattr(rt, "m_LocalScale", None), ("x", "y", "z")),
+                "localRotation": _vec(getattr(rt, "m_LocalRotation", None)),
             }
+        elif rt is not None:
+            # a plain Transform inside a canvas: its children anchor to a zero-size
+            # rect at this point, so its local placement is needed to place them
+            node["transform"] = {
+                "localPosition": _vec(getattr(rt, "m_LocalPosition", None), ("x", "y", "z")),
+                "localRotation": _vec(getattr(rt, "m_LocalRotation", None)),
+                "localScale": _vec(getattr(rt, "m_LocalScale", None), ("x", "y", "z"))}
+        for c in _components(go):
+            if _ctype(c) == "CanvasGroup":
+                node["canvas_group"] = {"alpha": getattr(c, "m_Alpha", None),
+                                        "interactable": getattr(c, "m_Interactable", None)}
         key = oid(go)
         if key in seen or depth >= max_depth:
             self.errors["ui:tree-cut"] += 1

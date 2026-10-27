@@ -140,29 +140,61 @@ def canvas_size(scaler, screen):
     return sw / k, sh / k, k
 
 
-def place(node, frame):
-    """Resolve a RectTransform inside its parent's local rect.
+def _affine(frame):
+    """A frame is (a, b, c, d, tx, ty, x0, y0, x1, y1): the parent's local -> canvas
+    map X = a*x + c*y + tx, Y = b*x + d*y + ty, plus the parent's local rect.
+    The 8-tuple form (ox, oy, kx, ky, x0, y0, x1, y1) is an unrotated frame."""
+    if len(frame) == 8:
+        ox, oy, kx, ky, x0, y0, x1, y1 = frame
+        return (kx, 0.0, 0.0, ky, ox, oy, x0, y0, x1, y1)
+    return frame
 
-    frame = (ox, oy, kx, ky, x0, y0, x1, y1): origin + scale mapping the parent's
-    local space to canvas space, and the parent's local rect. Returns the node's
-    own frame and its absolute box (x, y, w, h) in canvas units, y up."""
-    ox, oy, kx, ky, px0, py0, px1, py1 = frame
+
+def place(node, frame):
+    """Resolve a RectTransform inside its parent's local rect, rotation included.
+
+    Returns the node's own frame and its axis-aligned box (x, y, w, h) in canvas
+    units, y up. A rotated or mirrored node gets the box of its four corners."""
+    a, b, c, d, tx, ty, px0, py0, px1, py1 = _affine(frame)
     r = node.get("rect")
     if not r:
-        return frame, None
+        t = node.get("transform")
+        if not t:
+            return frame, None
+        # plain Transform: placed by localPosition from the parent's pivot; its own
+        # rect is a point, so children anchor there
+        lp, sc = t.get("localPosition") or [0, 0, 0], t.get("localScale") or [1, 1, 1]
+        q = t.get("localRotation") or [0, 0, 0, 1]
+        th = 2 * math.atan2(q[2], q[3]) if len(q) >= 4 else 0.0
+        cs, sn = math.cos(th), math.sin(th)
+        la, lb, lc, ld = cs * sc[0], sn * sc[0], -sn * sc[1], cs * sc[1]
+        return (a * la + c * lb, b * la + d * lb, a * lc + c * ld, b * lc + d * ld,
+                a * lp[0] + c * lp[1] + tx, b * lp[0] + d * lp[1] + ty, 0.0, 0.0, 0.0, 0.0), None
     a0, a1 = r.get("anchorMin") or [0.5, 0.5], r.get("anchorMax") or [0.5, 0.5]
     pv, ap = r.get("pivot") or [0.5, 0.5], r.get("anchoredPosition") or [0, 0]
     sd, sc = r.get("sizeDelta") or [0, 0], r.get("localScale") or [1, 1, 1]
+    q = r.get("localRotation") or [0, 0, 0, 1]
     ax0, ax1 = px0 + a0[0] * (px1 - px0), px0 + a1[0] * (px1 - px0)
     ay0, ay1 = py0 + a0[1] * (py1 - py0), py0 + a1[1] * (py1 - py0)
     w, h = (ax1 - ax0) + sd[0], (ay1 - ay0) + sd[1]
     pivx = ax0 + (ax1 - ax0) * pv[0] + ap[0]
     pivy = ay0 + (ay1 - ay0) * pv[1] + ap[1]
-    nox, noy = ox + kx * pivx, oy + ky * pivy
-    nkx, nky = kx * (sc[0] if len(sc) > 0 else 1), ky * (sc[1] if len(sc) > 1 else 1)
+    theta = 2 * math.atan2(q[2], q[3]) if len(q) >= 4 else 0.0     # rotation about z
+    cs, sn = math.cos(theta), math.sin(theta)
+    sx, sy = (sc[0] if len(sc) > 0 else 1), (sc[1] if len(sc) > 1 else 1)
+    # child local -> parent local: T(piv) R(theta) S(sx, sy); then the parent's map
+    la, lb, lc, ld = cs * sx, sn * sx, -sn * sy, cs * sy
+    na, nb = a * la + c * lb, b * la + d * lb
+    nc, nd = a * lc + c * ld, b * lc + d * ld
+    ntx, nty = a * pivx + c * pivy + tx, b * pivx + d * pivy + ty
     lx0, ly0 = -pv[0] * w, -pv[1] * h
-    own = (nox, noy, nkx, nky, lx0, ly0, lx0 + w, ly0 + h)
-    box = (nox + nkx * lx0, noy + nky * ly0, nkx * w, nky * h)
+    own = (na, nb, nc, nd, ntx, nty, lx0, ly0, lx0 + w, ly0 + h)
+    xs, ys = [], []
+    for x in (lx0, lx0 + w):
+        for y in (ly0, ly0 + h):
+            xs.append(na * x + nc * y + ntx)
+            ys.append(nb * x + nd * y + nty)
+    box = (min(xs), min(ys), max(xs) - min(xs), max(ys) - min(ys))
     return own, box
 
 
@@ -211,7 +243,8 @@ def walk(node, path, depth, out, frame=None, geo=None, sprites=None):
         f = geo["px"]
         x, y_top = box[0] * f, (geo["ch"] - box[1] - box[3]) * f
         row["px"] = f"{x:.0f},{y_top:.0f},{box[2] * f:.0f}x{box[3] * f:.0f}"
-        row["scale"] = f"{own[2]:g}" if own and abs(own[2] - 1) > 1e-3 else "1"
+        k = math.hypot(own[0], own[1]) if own and len(own) == 10 else (own[2] if own else 1)
+        row["scale"] = f"{k:g}" if abs(k - 1) > 1e-3 else "1"
         # painted extent: a Simple image draws the sprite's alpha box scaled into
         # the rect — that, not the rect, is what a reference screenshot measures
         if meta and meta.get("alpha_bbox") and meta.get("size") and row["image_type"] in ("simple", ""):
