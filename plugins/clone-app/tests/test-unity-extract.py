@@ -55,6 +55,8 @@ with tempfile.TemporaryDirectory() as td:
     check("chunks concatenated in order", merged == b"AAABBBCCC")
     check("plain files carried over", os.path.exists(os.path.join(dst, "plain")))
     check("merge stats reported", stats["merged_split_groups"] == 1 and stats["linked"] == 1)
+    check("a reused scratch reports the same stats (deterministic manifest)",
+          ux.merge_sources([src], dst) == stats)
 
 # --- broken-piece classification -------------------------------------------
 check("whole mesh", ux.classify_mesh("stoneSquare1x1_geo") == "whole")
@@ -185,5 +187,52 @@ frames = ux.decode_streamed_clip(words)
 check("streamed frame decoded", len(frames) == 1 and abs(frames[0]["time"] - 0.5) < 1e-6)
 check("streamed curve coefficients", frames[0]["curves"][7] == [1.0, 2.0, 3.0, 4.0])
 check("empty streamed clip is empty", ux.decode_streamed_clip([]) == [])
+
+# --- 0.3: identity, per-sub-mesh materials, references -----------------------
+alloc = ux.NameAllocator()
+a1 = alloc.path("/tmp", "Sphere_1", ".obj")
+a2 = alloc.path("/tmp", "sphere_1", ".obj")
+check("allocator is case-insensitive (macOS overwrote Sphere_1 with sphere_1)",
+      a1.lower() != a2.lower())
+
+multi = "g Box\nv 0 0 0\nv 1 0 0\nv 0 1 0\ng Box_0\nf 1 2 3\ng Box_1\nf 1 3 2\n"
+painted = ux.attach_material_to_obj(multi, "m.mtl", ["Wood", "Metal"])
+check("each sub-mesh group gets its own usemtl in slot order",
+      painted.split("\n")[:1] == ["mtllib m.mtl"]
+      and "g Box_0\nusemtl Wood\nf 1 2 3" in painted and "g Box_1\nusemtl Metal\nf 1 3 2" in painted)
+check("material check counts painted groups", ux.obj_material_check(painted) == (2, 2))
+check("single top-level usemtl counts as under-painted",
+      ux.obj_material_check("usemtl A\n" + multi) == (2, 1))
+short = ux.attach_material_to_obj(multi, "m.mtl", ["Wood"])
+check("a sub-mesh without a slot is marked, not painted (Unity does not draw it)",
+      "g Box_1\n" + ux.NO_SLOT + "\nf 1 3 2" in short and short.count("usemtl ") == 1
+      and ux.obj_material_check(short) == (2, 2))
+
+vals = {"BallPrefab": {"ref": "sharedassets2.assets:38", "type": "GameObject", "name": "Ball"},
+        "list": [{"ref": "a:1", "type": "Sprite", "name": "s"}], "n": 3}
+refs = dict(ux._walk_refs(vals))
+check("script references are found with their field path",
+      refs.get("BallPrefab", {}).get("name") == "Ball" and "list[0]" in refs)
+
+with tempfile.TemporaryDirectory() as t:
+    aa = os.path.join(t, "pack", "assets", "aa", "Android")
+    os.makedirs(aa)
+    open(os.path.join(aa, "art_assets_all.bundle"), "w").close()
+    open(os.path.join(aa, "catalog.json"), "w").close()
+    found = ux.find_bundle_files([os.path.join(t, "pack")])
+    check("addressables bundles under assets/aa are found",
+          [os.path.basename(f) for f in found] == ["art_assets_all.bundle"])
+    for abi in ("armeabi-v7a", "arm64-v8a"):
+        d = os.path.join(t, "lib", abi)
+        os.makedirs(d)
+        open(os.path.join(d, "libil2cpp.so"), "w").close()
+    md = os.path.join(t, "assets", "bin", "Data", "Managed", "Metadata")
+    os.makedirs(md)
+    open(os.path.join(md, "global-metadata.dat"), "w").close()
+    lib, meta = ux.find_il2cpp([t])
+    check("64-bit libil2cpp preferred", "arm64-v8a" in lib and meta.endswith("global-metadata.dat"))
+
+check("pick keeps only the named fields",
+      ux._pick({"m_Sprite": 1, "m_Color": 2, "junk": 3}, ["m_Sprite", "m_Color"]) == {"m_Sprite": 1, "m_Color": 2})
 
 sys.exit(1 if fails else 0)

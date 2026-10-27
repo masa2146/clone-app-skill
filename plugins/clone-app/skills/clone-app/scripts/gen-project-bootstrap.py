@@ -80,8 +80,9 @@ def main():
     if has_guide:
         C += [
             "| **`Docs/assets/ASSET-INDEX.tsv`** | **One line per asset — grep this BEFORE putting anything on screen.** name, archetype, meshes, OBJ group counts, material slots, textures, components, children, **node counts + node→mesh map**, aliases. |",
-            "| **`Docs/assets/UI-ROLE-GUIDE.md`** | **Where a UI element sits and what it is for.** Recurring elements with their measured screen zone, size and sprite candidates. |",
-            "| `Docs/assets/UI-ELEMENT-INDEX.tsv` | Every UI node: canvas, node, zone, size, depth, components, sprite candidates, path. Grep it. |",
+            "| **`Docs/assets/UI-ROLE-GUIDE.md`** | **Where a UI element sits and what it is for.** Recurring elements with their measured screen zone, size and bound sprite. |",
+            "| `Docs/assets/UI-ELEMENT-INDEX.tsv` | Every UI node: canvas, node, zone, size, id, bound sprite + file, image type, on-screen px box, painted px, text, font size, path. Grep it. |",
+            "| `Docs/assets/UNITS.md` | Canvas unit → screen pixel, per CanvasScaler. |",
             "| `Docs/assets/COMPOSITION-RULES.md` | **How pieces combine** — §0 the node tree, multi-mesh objects, multi-group OBJs, multi-slot renderers, composites. |",
             "| `Docs/assets/COMPONENT-RECIPES.md` | Archetype → the Unity components it actually needs. |",
             "| `Docs/assets/ASSET-RULES.md` | The 5-step asset-resolution protocol + prohibitions. **Read before claiming an asset is missing.** |",
@@ -100,7 +101,14 @@ def main():
           "grep -i '<word>' Docs/assets/UI-ELEMENT-INDEX.tsv     # 1b. if it is UI",
           "grep -i '<word>' $W/extracted/game-assets/scenes/*.tree.txt   # 2. scene node name",
           "ls $W/extracted/game-assets/sprites | grep -i '<word>'        # 3. sprite",
+          "grep -i '<word>' $W/extracted/game-assets/scripts/references.tsv  # 4. which object a script uses",
           "```", "",
+          "**Names are not identities.** Two objects often share a name (a 30 kg showcase",
+          "ball and the 1.2 kg ball the game fires). Join by `id` (`<file>:<path id>`); find",
+          "the object the game really uses through the script field that points at it",
+          "(`references.tsv`), and read its values in `scripts/<Assembly>/<Class>.jsonl`.", "",
+          "**Before building on the extraction:** `python3 <clone-app>/scripts/check-extraction.py",
+          "$W/extracted/game-assets` — every FAIL line is a part of the data not to trust yet.", "",
           "Try synonyms (slot/tray/carrier, arrow/chevron, rail/track/conveyor).",
           "Still nothing → **write down why before you draw.** Full protocol:",
           "`Docs/assets/ASSET-RULES.md`.", ""]
@@ -109,12 +117,12 @@ def main():
         C += ["### Build objects from the node tree", "",
               f"{nodes_cov}/{len(ents)} entities carry `nodes` in `entity.json` — the object's",
               f"real hierarchy ({mesh_nodes} mesh-bearing nodes, {frac_nodes} fracture nodes).",
-              "Each node has `parent`, `localPosition/Rotation/Scale`, `mesh_file`,",
-              "`materials` (**in slot order**), `active`, `fracture`.", "",
+              "Each node has `id`, `parent` + `parent_name`, `path`, `localPosition/Rotation/Scale`,",
+              "`mesh_file`, `materials` (**in slot order**), `active`, `fracture`. The list is",
+              "depth-first; `nodes.tree.txt` in the entity folder is the same tree indented —",
+              "read the parent from `parent_name`/`path`, never from the line above.", "",
               "```bash",
-              "python3 -c \"import json;n=json.load(open('<entity>/entity.json'))['nodes'];"
-              "[print('  '*x['depth']+x['name'], x.get('mesh_file') or '', x.get('materials') or '',"
-              " 'FRAC' if x.get('fracture') else '') for x in n]\"",
+              "cat <entity>/nodes.tree.txt",
               "```", "",
               "- Apply each node's local transform. **Parts stacked at the origin means this was skipped.**",
               "- Assign `materials` in order to `sharedMaterials`. One material on a multi-slot renderer paints the whole object.",
@@ -123,16 +131,17 @@ def main():
 
     C += ["### Three checks on every piece", "",
           "1. Look at `preview.png` in the entity folder — names lie, renders do not.",
-          "2. `grep -c '^g ' x.obj` — more than one group means `LoadAssetAtPath` hands you a fragment.",
+          "2. `grep -c '^g ' x.obj` — more than one group means `LoadAssetAtPath` hands you a fragment;",
+          "   load every group (`LoadAllAssetsAtPath`) — `unity-import/ImportExtracted.cs` does.",
           "3. Read the material's floats in `materials.json` before calling a surface wrong.", ""]
 
     if ui:
         C += ["### UI", "",
-              "Node name, screen zone and size are **measured fact** (from RectTransform",
-              "anchors). **Sprite candidates are guesses** — the canvas dump collapses",
-              "`Image` to `CanvasRenderer` and loses the binding, so they were matched by",
-              "name. Open the PNG before using one. A control is often plate + icon +",
-              "hitbox, not one sprite.", "",
+              "Node name, zone, size, on-screen `px` box and the **bound sprite** are measured",
+              "fact (rect chain + decoded Image values + CanvasScaler). `painted_px` is what a",
+              "reference screenshot measures — the sprite's opaque part, not the rect.",
+              "`sprite_candidates` is a name guess, filled only where no binding exists.",
+              "A control is often plate + icon + hitbox, not one sprite.", "",
               "```bash",
               "awk -F'\\t' -v c='<Canvas>' '$1==c{printf \"%*s%s  [%s %s]\\n\", $5*2, \"\", $2, $3, $4}' \\",
               "  Docs/assets/UI-ELEMENT-INDEX.tsv",
@@ -143,7 +152,7 @@ def main():
 
     C += ["### Evidence discipline", "",
           "The reconstruction tags every claim: **[D]** measured · **[S]** certain from a",
-          "signature · **[I]** inferred · **[X]** not recoverable. Keep the tags when you",
+          "signature · **[I]** inferred · **[X]** not in the data. Keep the tags when you",
           "carry a claim into code. Do not promote a guess to a fact, and do not invent a",
           "number that is measurable in the extraction — say \"not measured\" instead.", "",
           "### Generated vs curated", "",

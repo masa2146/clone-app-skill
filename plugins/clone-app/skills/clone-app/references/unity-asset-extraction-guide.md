@@ -116,18 +116,26 @@ meshes called `BezierCurve.041`. So discovery is **structural first**:
 | Particles | every module as JSON | re-enter into a `ParticleSystem`; no importer does this automatically |
 | Animations | clips + controllers as JSON | check `curves_status` per clip; Mecanim curves are decoded from Streamed/Dense/Constant containers, legacy clips come out directly |
 | Physics | `physics.json` + `project-settings/` | copy the constants **before** hand-tuning; `project-settings/README.md` lists what differs from Unity defaults |
-| Prefab structure | hierarchy + every engine component value in `entity.json` | `unity-import/ImportExtracted.cs` rebuilds it; custom script field values are the one real gap |
+| Prefab structure | hierarchy + every engine component value in `entity.json`, depth-first, each node with `id`, `parent_name`, `path` and slot-ordered `materials`; `nodes.tree.txt` is the same tree indented for a human | `unity-import/ImportExtracted.cs` rebuilds it (every OBJ group as a sub-mesh) |
+| Script values | `scripts/<Assembly>/<Class>.jsonl` (one row per MonoBehaviour, by id), `scripts/references.tsv`, `scripts/script-fields.tsv` | type trees rebuilt from `libil2cpp.so` + `global-metadata.dat` (TypeTreeGeneratorAPI); balance tables, tuning, which prefab a controller spawns |
+| UI | `ui/*.json`: per node `id`, rect, and decoded `ui` values — the Image's bound `m_Sprite`, TMP text/size, Button wiring; the canvas' `scaler` | `gen-ui-map.py` turns it into pixels on a target screen (`UNITS.md`, `px_1080x2400`, `painted_px`) |
 
-## Genuinely unrecoverable — exactly three things
+## Identity: never join by name
 
-1. **MonoBehaviour / ScriptableObject field values** — type trees stripped in an
-   IL2CPP release build. This is what costs you balance tables, tuning configs
-   and LiveOps parameters. Class *names* survive in `ARCHITECTURE.md`.
-2. **Shader HLSL / compiled bytecode** — compiled per platform.
-3. **C# method bodies** — AOT-compiled into `libil2cpp.so`.
+Every record carries `id` = `<serialized file>:<path id>`. Names repeat: two
+materials, two rigidbodies, two meshes with one name are normal. `materials.json`
+is keyed by id with a `name` and `name_dup`; `physics.json` → `rigidbodies` is a
+list with `gameObject`, `gameObject_id`, `path` and `display_candidate` (kinematic
+or jointed: often a menu prop that shares the gameplay object's name).
 
-Any other "not recoverable" claim in a report is a bug. If something is missing
-it is because it was not extracted, not because it could not be.
+## Genuinely absent from the data files — two things
+
+1. **Shader HLSL / compiled bytecode** — compiled per platform.
+2. **C# method bodies** — AOT-compiled into `libil2cpp.so` (disassemble with
+   capstone when a formula is needed).
+
+Script field values used to be listed here; they are decoded since 0.3. Any other
+"not recoverable" claim in a report is a bug — run `check-extraction.py`.
 
 ## Honesty rules the extractor enforces
 

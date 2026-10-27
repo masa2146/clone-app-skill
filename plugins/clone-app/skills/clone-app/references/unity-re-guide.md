@@ -70,11 +70,17 @@ The rule: **Unity engine types ship their type tree, so every field is readable.
 Only user types (MonoBehaviour / ScriptableObject) are stripped in an IL2CPP
 release build.**
 
-**Genuinely NOT recoverable — exactly three things:**
+**Field values are recoverable too.** The type trees are stripped from the data
+files, but every field's name, type and order is in `global-metadata.dat`;
+TypeTreeGeneratorAPI rebuilds the trees from it and `unity-extract.py` decodes
+every MonoBehaviour into `scripts/` (a plain `read_typetree()` without the
+generator still raises). Verify a decoded value against a second source before
+tuning on it — `dump.cs` tooltips, or the field's use in a disassembled method.
+
+**Genuinely NOT in the data files — two things:**
 
 | Data | Why |
 |---|---|
-| MonoBehaviour / ScriptableObject field values | type trees stripped; `read_typetree()` raises. Costs you balance tables, tuning configs, LiveOps parameters. Class *names* survive via `MonoScript`. |
 | Shader HLSL / compiled bytecode | compiled per platform |
 | C# method bodies | AOT-compiled into `libil2cpp.so` |
 

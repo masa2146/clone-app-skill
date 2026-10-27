@@ -214,6 +214,11 @@ def main():
 
     spec_path = os.path.abspath(args.spec)
     work = os.path.abspath(args.work)
+    # the SKILL passes the clone-app workdir; the artifacts sit one level down in
+    # extracted/. Accept either, so the game spine is never silently empty.
+    if not os.path.isdir(os.path.join(work, "game-assets")) and \
+            os.path.isdir(os.path.join(work, "extracted", "game-assets")):
+        work = os.path.join(work, "extracted")
     with open(spec_path) as f:
         spec_text = f.read()
 

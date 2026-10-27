@@ -109,6 +109,8 @@ def norm(e, game_dir):
         "nodes": e.get("nodes") or [],
         "levels_used": e.get("levels_used"),
         "first_level": e.get("first_level"),
+        "id": e.get("id") or "",
+        "path": e.get("path") or "",
     }
 
 
@@ -157,11 +159,26 @@ NOUN_TR = {
 }
 
 
-def archetype_of(name):
+def archetype_of(name, e=None):
+    """Structure first (what the object IS: components), the name only as a hint.
+    A name dictionary written for one game mislabels the next one — one
+    game's pigs are the targets, a 'pig' regex written for another called them shooters."""
+    if e is not None:
+        rend = set(e.get("renderers") or [])
+        if e.get("particles") and not (rend - {"ParticleSystemRenderer", "TrailRenderer", "LineRenderer"}):
+            return "vfx"
+        if e.get("joints"):
+            return "jointed-body"
+        if e.get("rigidbody") and e.get("colliders"):
+            return "physics-body"
+        if e.get("colliders") and not e.get("rigidbody"):
+            return "static-collider"
+        if "SpriteRenderer" in rend and not e.get("meshes"):
+            return "sprite"
     low = name.lower()
     for tag, pat in ARCHETYPES:
         if re.search(pat, low):
-            return tag
+            return tag + " (name)"
     return "misc"
 
 
@@ -229,7 +246,7 @@ def write_index(rows, out):
         w.writerow(["name", "archetype", "dir", "meshes", "mesh_groups",
                     "material_slots", "textures", "components", "children",
                     "nodes", "mesh_nodes", "fracture_nodes", "node_meshes",
-                    "levels_used", "first_level", "aliases"])
+                    "levels_used", "first_level", "aliases", "id", "path"])
         for r in rows:
             w.writerow([
                 r["name"], r["archetype"], r["dir"],
@@ -247,6 +264,7 @@ def write_index(rows, out):
                 r["levels_used"] if r["levels_used"] is not None else "-",
                 r["first_level"] if r["first_level"] is not None else "-",
                 " ".join(r["aliases"]),
+                r.get("id", ""), r.get("path", ""),
             ])
     return p
 
@@ -346,11 +364,14 @@ Run these in order. Stop at the first hit.
    ```
 3. **grep material names** — surfaces are named by material:
    ```
-   python3 -c "import json;print([k for k in json.load(open('{os.path.abspath(os.path.join(game_dir,'materials.json'))}')) if '<word>'.lower() in k.lower()])"
+   python3 -c "import json;print([(k,v.get('name',k)) for k,v in json.load(open('{os.path.abspath(os.path.join(game_dir,'materials.json'))}')).items() if '<word>'.lower() in str(v.get('name',k)).lower()])"
    ```
 4. **try synonyms.** The extraction's vocabulary differs from yours:
    `slot / tray / carrier / bench` · `arrow / chevron` · `loader / starter /
-   machine` · `rail / track / conveyor / belt` · `pig / shooter / launcher`.
+   machine` · `rail / track / conveyor / belt` · `launcher / cannon / shooter`.
+   **Which object the game actually uses** is a script reference, not a name:
+   `grep -i '<word>' {os.path.abspath(game_dir)}/scripts/references.tsv` lists every
+   field that points at it (e.g. a controller's `BallPrefab`), with the target's id.
 5. **look at `preview.png`** in the entity folder. Names lie; renders do not.
 
 **If all five fail:** do not draw. Write down what you searched and why it might
@@ -590,12 +611,12 @@ def main():
             g = obj_groups(fp)
             if g:
                 groups[m] = g
-        arch = archetype_of(n["name"])
+        arch = archetype_of(n["name"], n)
         rows.append({
             **n,
             "groups": groups,
             "archetype": arch,
-            "aliases": aliases_of(n["name"], arch),
+            "aliases": aliases_of(n["name"], arch.replace(" (name)", "")),
             "recipe": recipe_of(n),
             "sprites_flag": bool(n["sprites"]),
         })

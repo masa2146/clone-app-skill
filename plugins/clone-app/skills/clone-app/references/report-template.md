@@ -50,9 +50,9 @@ Source: `$WORK/extracted/game-assets/` — see its `manifest.json`, `coverage-re
   {n} custom to this game (must be re-authored from the recorded property table)
 - **Derived findings:** {e.g. pre-modelled fracture rather than runtime fracture;
   MatCap-based shading; built-in-primitive objects; runtime-generated geometry}
-- **Not recovered:** MonoBehaviour/ScriptableObject field values (balance tables,
-  tuning configs), shader HLSL, IL2CPP method bodies — plus anything listed in
-  `coverage-report.md`. State this plainly; do not imply full coverage.
+- **Not recovered:** shader HLSL, IL2CPP method bodies — plus every FAIL line of
+  `check-extraction.txt` and anything listed in `coverage-report.md`. State this
+  plainly; do not imply full coverage.
 - **Legal:** extracted art is reference material. The transferable output is the
   structure — level schema, physics constants, entity taxonomy, architecture.
 

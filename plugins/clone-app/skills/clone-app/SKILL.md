@@ -202,6 +202,19 @@ Tell the subagent its clone-app scripts dir is
      `bash "$CA/unity-assets.sh" "$APK" "$WORK/extracted/game-assets"`. It writes
      `manifest.json` itself — do not hand-inventory the directory. Then
      `python3 "$CA/gen-coverage-report.py" "$WORK/extracted/game-assets/manifest.json" --out "$WORK/extracted/coverage-report.md"`.
+     **Then the self-check, always:**
+     `python3 "$CA/check-extraction.py" "$WORK/extracted/game-assets" | tee "$WORK/extracted/check-extraction.txt"`.
+     Exit 1 means at least one invariant failed (a sprite not bound, a material
+     lost to a name collision, a sub-mesh without its material, a tree cut short,
+     a bundle not loaded, script values not decoded). Carry every FAIL line into the
+     digest and the bootstrap — a game project must not build on a red extraction
+     without knowing which part is red. Asset bundles pulled from a CDN or the
+     device cache go in with `--bundles <dir>` on a re-run.
+     **Script values are decoded.** With `libil2cpp.so` + `global-metadata.dat` in
+     the package, the extractor rebuilds every MonoBehaviour type tree and writes
+     `scripts/<Assembly>/<Class>.jsonl` (values by object id) and
+     `scripts/references.tsv` (every object a script points at). "Which prefab
+     does the game fire" is `grep BallPrefab scripts/references.tsv`, not a name search.
      Read `$WORK/extracted/game-assets/IMPORT.md`, `manifest.json` and
      `project-settings/README.md` — never the extracted files themselves.
      The output contract is `unity-asset-extraction-guide.md`.
@@ -235,10 +248,10 @@ Tell the subagent its clone-app scripts dir is
      `$WORK/extracted/unity-digest.md` per `unity-re-guide.md`.
    - **Do not claim what was not extracted.** `manifest.json` notes and
      `coverage-report.md` are the honest record; carry their gaps into the
-     digest instead of implying full coverage. In particular, only three things
-     are genuinely unrecoverable — MonoBehaviour/ScriptableObject field values,
-     shader HLSL, and IL2CPP method bodies. Anything else missing is a tooling
-     gap to report, not a limitation to assert.
+     digest instead of implying full coverage. Only two things are genuinely
+     absent from the data files — shader HLSL and IL2CPP method bodies (logic).
+     Script field values ARE recovered (`scripts/`); a class listed header-only in
+     `scripts/index.json` is a tooling gap to report, not a limitation to assert.
    - If `$UNITY_TOOLS` is `limited:<reason>`, **skip the missing tool's step**
      (the user acknowledged the cost at the Phase 2c gate), write whatever is
      recoverable, and set `RE Method: $UNITY_TOOLS` (e.g.

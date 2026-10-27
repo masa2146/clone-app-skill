@@ -14,17 +14,19 @@ A per-canvas tree is NOT emitted as a second file — it is one awk line off the
 index, and a generated file that only re-renders another generated file is a file
 that goes stale. The recipe is printed in UI-ROLE-GUIDE.md.
 
-Note on a real extraction gap: the canvas dump keeps RectTransform trees and
-component *names*, but `Image` components collapse to `CanvasRenderer` and the
-sprite binding is lost. So sprites are matched to nodes by **name token overlap**
-and reported as CANDIDATES, ranked — never as fact. The node name, the screen
-zone and the size are facts; the sprite is a ranked guess you confirm by opening
-the PNG.
+Since clone-app 0.3 the extraction decodes uGUI script values, so each node's
+`sprite` is the sprite its Image really draws (fact), its size is the resolved
+rect (not the raw sizeDelta, which is a margin on stretched axes), its zone comes
+from the absolute centre (not the anchors), and `px` is the on-screen box at the
+target resolution through the canvas' CanvasScaler. `sprite_candidates` (a ranked
+name-token guess) is only filled where no binding exists — legacy extractions,
+or nodes without an Image.
 """
 
 import argparse
 import csv
 import json
+import math
 import os
 import re
 import sys
@@ -113,18 +115,126 @@ def match_sprites(node_name, sprite_toks, limit=4):
 
 # --------------------------------------------------------------------------- #
 
-def walk(node, path, depth, out):
+def canvas_size(scaler, screen):
+    """(canvas width, height in canvas units, scale) at `screen` through a
+    CanvasScaler. Unity: ScaleWithScreenSize blends log2 of the two axis ratios
+    by matchWidthOrHeight; Expand/Shrink take min/max; ConstantPixelSize uses
+    scaleFactor. No scaler (legacy dump): the screen itself, scale 1."""
+    sw, sh = screen
+    if not scaler:
+        return sw, sh, 1.0
+    mode = scaler.get("m_UiScaleMode", 0)
+    if mode == 1:
+        ref = scaler.get("m_ReferenceResolution") or {}
+        rw, rh = float(ref.get("x") or sw), float(ref.get("y") or sh)
+        match_mode = scaler.get("m_ScreenMatchMode", 0)
+        if match_mode == 1:
+            k = min(sw / rw, sh / rh)
+        elif match_mode == 2:
+            k = max(sw / rw, sh / rh)
+        else:
+            m = float(scaler.get("m_MatchWidthOrHeight") or 0)
+            k = 2 ** ((1 - m) * math.log2(sw / rw) + m * math.log2(sh / rh))
+    else:
+        k = float(scaler.get("m_ScaleFactor") or 1.0)
+    return sw / k, sh / k, k
+
+
+def place(node, frame):
+    """Resolve a RectTransform inside its parent's local rect.
+
+    frame = (ox, oy, kx, ky, x0, y0, x1, y1): origin + scale mapping the parent's
+    local space to canvas space, and the parent's local rect. Returns the node's
+    own frame and its absolute box (x, y, w, h) in canvas units, y up."""
+    ox, oy, kx, ky, px0, py0, px1, py1 = frame
+    r = node.get("rect")
+    if not r:
+        return frame, None
+    a0, a1 = r.get("anchorMin") or [0.5, 0.5], r.get("anchorMax") or [0.5, 0.5]
+    pv, ap = r.get("pivot") or [0.5, 0.5], r.get("anchoredPosition") or [0, 0]
+    sd, sc = r.get("sizeDelta") or [0, 0], r.get("localScale") or [1, 1, 1]
+    ax0, ax1 = px0 + a0[0] * (px1 - px0), px0 + a1[0] * (px1 - px0)
+    ay0, ay1 = py0 + a0[1] * (py1 - py0), py0 + a1[1] * (py1 - py0)
+    w, h = (ax1 - ax0) + sd[0], (ay1 - ay0) + sd[1]
+    pivx = ax0 + (ax1 - ax0) * pv[0] + ap[0]
+    pivy = ay0 + (ay1 - ay0) * pv[1] + ap[1]
+    nox, noy = ox + kx * pivx, oy + ky * pivy
+    nkx, nky = kx * (sc[0] if len(sc) > 0 else 1), ky * (sc[1] if len(sc) > 1 else 1)
+    lx0, ly0 = -pv[0] * w, -pv[1] * h
+    own = (nox, noy, nkx, nky, lx0, ly0, lx0 + w, ly0 + h)
+    box = (nox + nkx * lx0, noy + nky * ly0, nkx * w, nky * h)
+    return own, box
+
+
+def zone_abs(box, cw, ch):
+    if not box:
+        return "?"
+    cx, cy = (box[0] + box[2] / 2) / cw, (box[1] + box[3] / 2) / ch
+    if box[2] >= 0.9 * cw and box[3] >= 0.9 * ch:
+        return "full-screen"
+    hx = "left" if cx < 0.34 else ("right" if cx > 0.66 else "center")
+    vy = "bottom" if cy < 0.34 else ("top" if cy > 0.66 else "middle")
+    return "center" if (hx, vy) == ("center", "middle") else f"{vy}-{hx}"
+
+
+def walk(node, path, depth, out, frame=None, geo=None, sprites=None):
+    """Flatten a canvas tree. With `geo` (canvas w/h + px factor) every node gets
+    its absolute box; with decoded `ui` values, its bound sprite and text."""
     rect = node.get("rect")
-    out.append({
+    own, box = (frame, None)
+    if geo and frame is not None:
+        own, box = place(node, frame) if depth else (frame, (0, 0, geo["cw"], geo["ch"]))
+    ui = node.get("ui") or {}
+    img = ui.get("Image") or {}
+    spr = img.get("m_Sprite") or {}
+    meta = (sprites or {}).get(spr.get("ref")) if spr.get("ref") else None
+    tmp = ui.get("TextMeshProUGUI") or ui.get("TextMeshPro") or {}
+    row = {
         "name": node.get("name", "?"),
+        "id": node.get("id", ""),
         "path": path,
         "depth": depth,
-        "zone": zone_of(rect),
-        "size": size_of(rect),
+        "zone": zone_abs(box, geo["cw"], geo["ch"]) if box and geo else zone_of(rect),
+        "size": f"{box[2]:.0f}x{box[3]:.0f}" if box else size_of(rect),
+        "px": "",
+        "scale": "",
         "components": node.get("components", []),
-    })
+        "sprite": spr.get("name") or "",
+        "sprite_file": meta["file"] if meta else "",
+        "image_type": {0: "simple", 1: "sliced", 2: "tiled", 3: "filled"}.get(img.get("m_Type"), "")
+                      if img else "",
+        "painted_px": "",
+        "text": (tmp.get("m_text") or (ui.get("Text") or {}).get("m_Text") or "").replace("\n", " ")[:80],
+        "font_size": tmp.get("m_fontSize", ""),
+    }
+    if box and geo:
+        f = geo["px"]
+        x, y_top = box[0] * f, (geo["ch"] - box[1] - box[3]) * f
+        row["px"] = f"{x:.0f},{y_top:.0f},{box[2] * f:.0f}x{box[3] * f:.0f}"
+        row["scale"] = f"{own[2]:g}" if own and abs(own[2] - 1) > 1e-3 else "1"
+        # painted extent: a Simple image draws the sprite's alpha box scaled into
+        # the rect — that, not the rect, is what a reference screenshot measures
+        if meta and meta.get("alpha_bbox") and meta.get("size") and row["image_type"] in ("simple", ""):
+            sw, sh = meta["size"]
+            bx0, by0, bx1, by1 = meta["alpha_bbox"]
+            row["painted_px"] = f"{box[2] * f * (bx1 - bx0) / sw:.0f}x{box[3] * f * (by1 - by0) / sh:.0f}"
+    out.append(row)
     for ch in node.get("children", []) or []:
-        walk(ch, f"{path}/{ch.get('name','?')}", depth + 1, out)
+        walk(ch, f"{path}/{ch.get('name','?')}", depth + 1, out, own, geo, sprites)
+
+
+def load_sprite_meta(game_dir):
+    """sprite id -> {file, size, alpha_bbox} from sprites/sprite-meta.json."""
+    meta = {}
+    p = os.path.join(game_dir, "sprites", "sprite-meta.json")
+    try:
+        data = json.load(open(p))
+    except Exception:
+        return meta
+    for fname, v in data.items():
+        if v.get("id"):
+            meta[v["id"]] = {"file": fname, "size": v.get("size"), "alpha_bbox": v.get("alpha_bbox")}
+    return meta
 
 
 def main():
@@ -132,7 +242,10 @@ def main():
     ap.add_argument("extracted")
     ap.add_argument("--out", required=True)
     ap.add_argument("--project-name", default="project")
+    ap.add_argument("--screen", default="1080x2400",
+                    help="target screen WxH for the px column (default 1080x2400)")
     a = ap.parse_args()
+    screen = tuple(float(v) for v in a.screen.lower().split("x"))
 
     game_dir = find_game_dir(a.extracted)
     ui_dir = os.path.join(game_dir, "ui")
@@ -154,6 +267,7 @@ def main():
 
     sprites = load_sprites(game_dir)
     sprite_toks = [(s, set(toks(s)) - STOP) for s in sprites]
+    sprite_meta = load_sprite_meta(game_dir)
 
     canvases = []
     for f in sorted(os.listdir(ui_dir)):
@@ -164,9 +278,15 @@ def main():
         except Exception:
             continue
         nodes = []
-        walk(d.get("tree", {}), d.get("tree", {}).get("name", "?"), 0, nodes)
+        geo, frame = None, None
+        if d.get("render_mode") != 2:            # world-space canvases have no screen box
+            cw, ch, k = canvas_size(d.get("scaler"), screen)
+            geo = {"cw": cw, "ch": ch, "px": screen[0] / cw, "scale": k}
+            frame = (cw / 2, ch / 2, 1.0, 1.0, -cw / 2, -ch / 2, cw / 2, ch / 2)
+        walk(d.get("tree", {}), d.get("tree", {}).get("name", "?"), 0, nodes, frame, geo, sprite_meta)
         canvases.append({
             "file": f,
+            "geo": geo, "scaler": d.get("scaler"), "nested": d.get("nested"),
             "name": d.get("name", os.path.splitext(f)[0]),
             "sorting_order": d.get("sorting_order"),
             "nodes": nodes,
@@ -176,7 +296,7 @@ def main():
 
     # ---------------- role guide -------------------------------------------- #
     role = defaultdict(lambda: {"n": 0, "zones": Counter(), "sizes": Counter(),
-                                "canvases": set()})
+                                "canvases": set(), "sprites": Counter()})
     for c in canvases:
         for n in c["nodes"]:
             r = role[n["name"]]
@@ -184,7 +304,10 @@ def main():
             r["zones"][n["zone"]] += 1
             if n["size"]:
                 r["sizes"][n["size"]] += 1
+            if n["sprite"]:
+                r["sprites"][n["sprite"]] += 1
             r["canvases"].add(c["name"])
+    bound_total = sum(1 for c in canvases for n in c["nodes"] if n["sprite"])
 
     common = sorted(role.items(), key=lambda kv: -kv[1]["n"])
     L = [f"# UI Role Guide — {a.project_name}", "",
@@ -193,21 +316,24 @@ def main():
          f"{len(canvases)} canvases · {sum(len(c['nodes']) for c in canvases)} nodes · "
          f"{len(sprites)} sprites", "",
          "## How to read a row", "",
-         "- **zone** — computed from the RectTransform anchor pair. **This is fact.**",
-         "- **typical size** — the most common `sizeDelta`. Fact.",
-         "- **sprite candidates** — matched by name-token overlap and ranked.",
-         "  **This is a guess.** The canvas dump lost the `Image → sprite` binding",
-         "  (Image components collapsed to `CanvasRenderer`). Confirm by opening the",
-         "  PNG before you use it.", "",
+         "- **zone** — from the node's absolute centre on the canvas. **Fact.**",
+         "- **typical size** — the resolved rect in canvas units (stretched axes",
+         "  included, local scale applied). **Fact.** UNITS.md converts to pixels.",
+         ("- **sprite** — the sprite the Image really draws, decoded from the scene"
+          " data. **Fact** (" + str(bound_total) + " nodes bound)." if bound_total else
+          "- **sprite candidates** — matched by name-token overlap and ranked. **A"
+          " guess**: this extraction has no decoded Image values. Open the PNG first."), "",
          "## Recurring elements", "",
-         "| element | count | usual zone | typical size | sprite candidates |",
+         "| element | count | usual zone | typical size | " +
+         ("sprite (bound) |" if bound_total else "sprite candidates |"),
          "|---|---|---|---|---|"]
     for name, r in common[:70]:
         if r["n"] < 3:
             continue
         z = r["zones"].most_common(1)[0][0]
         s = r["sizes"].most_common(1)[0][0] if r["sizes"] else "-"
-        cands = match_sprites(name, sprite_toks)
+        cands = [x for x, _ in r["sprites"].most_common(3)] or \
+            ([] if bound_total else match_sprites(name, sprite_toks))
         L.append(f"| `{name}` | {r['n']} | {z} | {s} | " +
                  (", ".join(f"`{x}`" for x in cands) if cands else "—") + " |")
 
@@ -225,8 +351,10 @@ def main():
         L += [f"`{close_name}` appears in **{cb['n']} canvases**.", "",
               f"- **zones:** {zz}",
               f"- **sizes:** {ss}",
-              "- **sprite candidates:** " +
-              (", ".join(f"`{x}`" for x in match_sprites(close_name, sprite_toks)) or "—"),
+              ("- **bound sprite:** " + (", ".join(f"`{x}` ({n})" for x, n in cb["sprites"].most_common(3)) or "—")
+               if bound_total else
+               "- **sprite candidates:** " +
+               (", ".join(f"`{x}`" for x in match_sprites(close_name, sprite_toks)) or "—")),
               "- **canvases:** " + ", ".join(f"`{c}`" for c in sorted(cb["canvases"])[:10]) +
               (" …" if len(cb["canvases"]) > 10 else ""),
               "",
@@ -235,9 +363,11 @@ def main():
                         if re.search(r"close|cross|dismiss|^x_|_x$", x, re.I))[:1200] or "(none)",
               "```", "",
               "So: a modal's close control is a node named "
-              f"`{close_name}`, sitting at the zone above, and its art is one of the sprites "
-              "listed. Open the PNG before choosing — the sprite link is a name match, "
-              "not a recovered binding.",
+              f"`{close_name}`, sitting at the zone above, " +
+              ("drawing the bound sprite above (recovered from the scene data)."
+               if bound_total else
+               "and its art is one of the sprites listed. Open the PNG before choosing — "
+               "the sprite link is a name match, not a recovered binding."),
               "",
               "Sibling nodes on the same control (grep the index for the canvas to see the",
               "full group — a close button is often plate + icon + hitbox, not one sprite):",
@@ -282,19 +412,45 @@ def main():
     with open(p, "w", newline="") as fh:
         w = csv.writer(fh, delimiter="\t")
         w.writerow(["canvas", "node", "zone", "size", "depth",
-                    "components", "sprite_candidates", "path"])
+                    "components", "sprite_candidates", "path",
+                    "id", "sprite", "sprite_file", "image_type", "px_" + a.screen, "painted_px",
+                    "scale", "text", "font_size"])
         for c in canvases:
             for n in c["nodes"]:
                 w.writerow([c["name"], n["name"], n["zone"], n["size"], n["depth"],
                             ";".join(n["components"]),
-                            ";".join(match_sprites(n["name"], sprite_toks)),
-                            n["path"]])
+                            "" if n["sprite"] else ";".join(match_sprites(n["name"], sprite_toks)),
+                            n["path"], n["id"], n["sprite"], n["sprite_file"], n["image_type"],
+                            n["px"], n["painted_px"], n["scale"], n["text"], n["font_size"]])
+    write_units(a.out, canvases, a.screen, a.project_name)
 
     print(f"canvases={len(canvases)} nodes={sum(len(c['nodes']) for c in canvases)} "
           f"sprites={len(sprites)}")
-    for f in ("UI-ROLE-GUIDE.md", "UI-ELEMENT-INDEX.tsv"):
+    for f in ("UI-ROLE-GUIDE.md", "UI-ELEMENT-INDEX.tsv", "UNITS.md"):
         fp = os.path.join(a.out, f)
         print("  wrote", fp, f"({os.path.getsize(fp)}B)")
+
+
+def write_units(out, canvases, screen, project):
+    """UNITS.md: how many screen pixels one canvas unit is, per scaler."""
+    L = [f"# UI units — {project}", "",
+         f"Target screen **{screen}**. A reference number read off a canvas is in canvas",
+         "units; multiply by the factor below to get pixels on that screen. Every row of",
+         "UI-ELEMENT-INDEX.tsv already carries the converted box in its `px_` column.", "",
+         "| canvas | scaler | canvas size (units) | 1 unit = px |", "|---|---|---|---|"]
+    for c in canvases:
+        g, sc = c.get("geo"), c.get("scaler") or {}
+        if not g:
+            L.append(f"| `{c['name']}` | world space | — | — |")
+            continue
+        ref = sc.get("m_ReferenceResolution") or {}
+        desc = (f"scale with screen, ref {ref.get('x', 0):g}x{ref.get('y', 0):g}, "
+                f"match {sc.get('m_MatchWidthOrHeight', 0):g}") if sc.get("m_UiScaleMode") == 1 else \
+            ("constant pixel size" if sc else "none decoded (legacy: assumed 1:1)")
+        L.append(f"| `{c['name']}`{' (nested)' if c.get('nested') else ''} | {desc} | "
+                 f"{g['cw']:.1f} x {g['ch']:.1f} | {g['px']:.5f} |")
+    with open(os.path.join(out, "UNITS.md"), "w") as f:
+        f.write("\n".join(L) + "\n")
 
 
 if __name__ == "__main__":

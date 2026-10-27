@@ -5,14 +5,15 @@
 // every entities/<Name>/entity.json and recreates the object as a prefab with
 // its meshes, material values, colliders, rigidbody and joints applied.
 //
-// It deliberately does NOT try to reproduce the original's custom scripts:
-// MonoBehaviour field values are stripped in an IL2CPP release build and are
-// not in the extraction. Script *names* are listed on each prefab in a
-// ExtractedEntityNote component so you know what to reimplement.
+// It deliberately does NOT try to reproduce the original's custom scripts. Their
+// field values ARE in the extraction (game-assets/scripts/, one JSONL per class,
+// keyed by object id) — read them when you reimplement a script. Script *names*
+// are listed on each prefab in an ExtractedEntityNote component.
 #if UNITY_EDITOR
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using UnityEditor;
 using UnityEngine;
 
@@ -210,7 +211,7 @@ public class ImportExtracted : EditorWindow
                         if (!string.IsNullOrEmpty(c.mesh))
                         {
                             var mp = Path.Combine(targetDir, "Meshes", c.mesh + ".obj").Replace("\\", "/");
-                            mc.sharedMesh = AssetDatabase.LoadAssetAtPath<Mesh>(mp);
+                            mc.sharedMesh = LoadObjMesh(mp);
                         }
                         break;
                 }
@@ -240,7 +241,7 @@ public class ImportExtracted : EditorWindow
             note.originalScripts = string.Join(", ", info.scripts);
             note.notes = "geometry_status=" + info.geometryStatus +
                          "; joints and connected bodies need manual wiring; " +
-                         "MonoBehaviour field values were not recoverable.";
+                         "script field values: game-assets/scripts/ (by object id).";
 
             var prefabPath = Path.Combine(targetDir, "Prefabs", info.entity + ".prefab").Replace("\\", "/");
             PrefabUtility.SaveAsPrefabAsset(go, prefabPath);
@@ -292,14 +293,15 @@ public class ImportExtracted : EditorWindow
             if (!string.IsNullOrEmpty(n.meshFile))
             {
                 var mp = Path.Combine(targetDir, "Meshes", n.meshFile).Replace("\\", "/");
-                var mesh = AssetDatabase.LoadAssetAtPath<Mesh>(mp);
+                var mesh = LoadObjMesh(mp);
                 if (mesh != null)
                 {
                     g.AddComponent<MeshFilter>().sharedMesh = mesh;
                     var mr = g.AddComponent<MeshRenderer>();
                     // slot order matters: it maps to sub-mesh order
                     var mats = new List<Material>();
-                    foreach (var mn in n.materials) mats.Add(ResolveNamedMaterial(info, mn));
+                    foreach (var mn in (n.mtlMaterials.Count > 0 ? n.mtlMaterials : n.materials))
+                        mats.Add(ResolveNamedMaterial(info, mn));
                     if (mats.Count == 0) mats.Add(ResolveMaterial(info, null));
                     mr.sharedMaterials = mats.ToArray();
                 }
@@ -312,13 +314,48 @@ public class ImportExtracted : EditorWindow
         foreach (var meshFile in info.wholeMeshFiles)
         {
             var assetPath = Path.Combine(targetDir, "Meshes", meshFile).Replace("\\", "/");
-            var mesh = AssetDatabase.LoadAssetAtPath<Mesh>(assetPath);
+            var mesh = LoadObjMesh(assetPath);
             if (mesh == null) continue;
             var child = new GameObject(Path.GetFileNameWithoutExtension(meshFile));
             child.transform.SetParent(go.transform, false);
             child.AddComponent<MeshFilter>().sharedMesh = mesh;
             child.AddComponent<MeshRenderer>().sharedMaterial = ResolveMaterial(info, folder);
         }
+    }
+
+    /// <summary>Unity 6 imports every OBJ group as its own Mesh sub-asset, so
+    /// LoadAssetAtPath returns only the first group — a multi-material object came
+    /// in with one region. The exporter writes `g name` (vertices) then one
+    /// `g name_N` per sub-mesh; rebuild ONE mesh whose sub-mesh N is group N, so
+    /// material slot N lands on the region it was made for.</summary>
+    private static Mesh LoadObjMesh(string objPath)
+    {
+        var groups = AssetDatabase.LoadAllAssetsAtPath(objPath).OfType<Mesh>()
+            .Where(m => m.vertexCount > 0 && m.subMeshCount > 0 && m.GetIndexCount(0) > 0)
+            .OrderBy(m => GroupIndex(m.name)).ThenBy(m => m.name, StringComparer.Ordinal)
+            .ToList();
+        if (groups.Count == 0) return null;
+        if (groups.Count == 1) return groups[0];
+        var cachePath = Path.ChangeExtension(objPath, null) + ".submeshes.asset";
+        var cached = AssetDatabase.LoadAssetAtPath<Mesh>(cachePath);
+        if (cached != null) return cached;
+        var merged = new Mesh
+        {
+            name = Path.GetFileNameWithoutExtension(objPath),
+            indexFormat = UnityEngine.Rendering.IndexFormat.UInt32,
+        };
+        merged.CombineMeshes(groups.Select(m => new CombineInstance
+            { mesh = m, transform = Matrix4x4.identity }).ToArray(), false, false);
+        merged.RecalculateBounds();
+        AssetDatabase.CreateAsset(merged, cachePath);
+        return merged;
+    }
+
+    /// <summary>`name_12` -> 12 (numeric, so _10 sorts after _9); no suffix -> -1.</summary>
+    private static int GroupIndex(string meshName)
+    {
+        int us = meshName.LastIndexOf('_');
+        return us >= 0 && int.TryParse(meshName.Substring(us + 1), out var k) ? k : -1;
     }
 
     /// <summary>Create (or fetch) one Unity material per extracted material, with
@@ -405,6 +442,8 @@ public class ImportExtracted : EditorWindow
         public Vector3? localPosition, localScale;
         public Quaternion? localRotation;
         public List<string> materials = new List<string>();
+        // unique per entity (two materials may share a name); keys of entity.json "materials"
+        public List<string> mtlMaterials = new List<string>();
     }
 
     private class MaterialInfo
@@ -538,6 +577,8 @@ public class ImportExtracted : EditorWindow
                 if (q.Count >= 4) ni.localRotation = new Quaternion(q[0], q[1], q[2], q[3]);
                 foreach (var m in MiniJson.Arr(n, "materials"))
                     ni.materials.Add(Convert.ToString(m));
+                foreach (var m in MiniJson.Arr(n, "materials_mtl"))
+                    ni.mtlMaterials.Add(Convert.ToString(m));
                 e.nodes.Add(ni);
             }
             return e;

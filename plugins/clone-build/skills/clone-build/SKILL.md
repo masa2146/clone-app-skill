@@ -125,7 +125,7 @@ fracture debris under a disabled root).
 Generate the gated task graph from the spec + artifacts:
 ```bash
 python3 ${CLAUDE_PLUGIN_ROOT}/skills/clone-build/scripts/gen-build-plan.py \
-  "$SPEC" --work "$WORK" --out "$WORK/deliverables/build-plan.json"
+  "$SPEC" --work "$WORK/extracted" --out "$WORK/deliverables/build-plan.json"
 ```
 The schema and the generation rules are in `references/plan-contract.md`; the gate
 kind per task type is in `references/gate-catalog.md`. Any entry in the plan's
