@@ -120,6 +120,28 @@ meshes called `BezierCurve.041`. So discovery is **structural first**:
 | Script values | `scripts/<Assembly>/<Class>.jsonl` (one row per MonoBehaviour, by id), `scripts/references.tsv`, `scripts/script-fields.tsv` | type trees rebuilt from `libil2cpp.so` + `global-metadata.dat` (TypeTreeGeneratorAPI); balance tables, tuning, which prefab a controller spawns |
 | UI | `ui/*.json`: per node `id`, rect, and decoded `ui` values — the Image's bound `m_Sprite`, TMP text/size, Button wiring; the canvas' `scaler` | `gen-ui-map.py` turns it into pixels on a target screen (`UNITS.md`, `px_1080x2400`, `painted_px`) |
 
+## Proving a rebuild (do this before building gameplay on the prefabs)
+
+1. `python3 scripts/expected-import.py <game-assets> > expect.json` — what every node must
+   measure, computed from the extracted files alone (triangles per sub-mesh, mesh box, box
+   in the entity root's space, parent, local TRS, material per slot, colliders, mass).
+2. In a throwaway Unity project: `ImportExtracted.cs` + `VerifyImport.cs` in `Assets/Editor/`,
+   `ExtractedNode.cs` outside it; `-executeMethod ImportExtracted.ImportBatch -cloneSource <game-assets>`,
+   then `-executeMethod VerifyImport.Run -cloneExpect expect.json`. Exit 1 lists every node that
+   differs. Plant a known error in expect.json once (shift a box, swap two slots) to see it caught.
+3. `RenderLayout.cs` places prefabs from a layout JSON (prefab, world position/rotation) with a
+   scene camera from `scenes/<scene>.objects.json` and renders one frame; put it next to a real
+   screenshot of the same level. Level content is usually spawned under a scene anchor
+   (`transforms` in the same file); a camera FOV may be refit at runtime by a script — read its
+   fields in `scripts/` before blaming the geometry.
+
+Skinned meshes are posed by their skeleton at extraction (`skin_baked` on the node): a
+SkinnedMeshRenderer's vertices are in bind space, and drawn as a plain mesh at the node they
+float away from where the game shows them. Unity primitives (`builtin_mesh`) and
+SpriteRenderers (`sprite_file`, PPU, pivot) are rebuilt too. Runtime-built geometry (a table
+top sized from level data, a procedural rope) is not in the files: the node exists, its mesh
+does not — say so instead of drawing one.
+
 ## Identity: never join by name
 
 Every record carries `id` = `<serialized file>:<path id>`. Names repeat: two

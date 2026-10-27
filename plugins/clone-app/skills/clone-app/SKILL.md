@@ -215,6 +215,9 @@ Tell the subagent its clone-app scripts dir is
      `scripts/<Assembly>/<Class>.jsonl` (values by object id) and
      `scripts/references.tsv` (every object a script points at). "Which prefab
      does the game fire" is `grep BallPrefab scripts/references.tsv`, not a name search.
+     **Rebuilds are proven, not eyeballed:** `unity-asset-extraction-guide.md` → "Proving a
+     rebuild" (expected-import.py + VerifyImport.cs node by node, RenderLayout.cs next to a
+     real screenshot). Hand the clone-build phase the verify report with the prefabs.
      Read `$WORK/extracted/game-assets/IMPORT.md`, `manifest.json` and
      `project-settings/README.md` — never the extracted files themselves.
      The output contract is `unity-asset-extraction-guide.md`.

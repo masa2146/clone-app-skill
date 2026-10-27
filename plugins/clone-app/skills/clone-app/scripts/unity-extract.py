@@ -94,6 +94,22 @@ KNOWN_SHADER_VENDORS = (
 # Pure helpers — no UnityPy, unit-tested offline
 # ---------------------------------------------------------------------------
 
+def _finite(v):
+    """JSON has no Infinity/NaN (a joint's breakForce is +inf); write them as
+    strings so every reader — not only Python's — can parse the file."""
+    if isinstance(v, float) and (v != v or v in (float("inf"), float("-inf"))):
+        return "NaN" if v != v else ("Infinity" if v > 0 else "-Infinity")
+    if isinstance(v, dict):
+        return {k: _finite(x) for k, x in v.items()}
+    if isinstance(v, (list, tuple)):
+        return [_finite(x) for x in v]
+    return v
+
+
+def _dump_json(payload, f, **kw):
+    json.dump(_finite(payload), f, allow_nan=False, **kw)
+
+
 def safe_name(name, fallback="unnamed", limit=120):
     """Filesystem-safe asset name. Empty/whitespace names get the fallback."""
     n = SAFE_RE.sub("_", (name or "").strip())
@@ -732,6 +748,47 @@ def _has_canvas_ancestor(go):
     return False
 
 
+def _qmul(a, b):
+    ax, ay, az, aw = a
+    bx, by, bz, bw = b
+    return (aw * bx + ax * bw + ay * bz - az * by, aw * by - ax * bz + ay * bw + az * bx,
+            aw * bz + ax * by - ay * bx + az * bw, aw * bw - ax * bx - ay * by - az * bz)
+
+
+def _qrot(q, v):
+    x, y, z, w = q
+    tx, ty, tz = 2 * (y * v[2] - z * v[1]), 2 * (z * v[0] - x * v[2]), 2 * (x * v[1] - y * v[0])
+    return (v[0] + w * tx + (y * tz - z * ty), v[1] + w * ty + (z * tx - x * tz),
+            v[2] + w * tz + (x * ty - y * tx))
+
+
+def _world_trs(tr, limit=256):
+    """World position, rotation (x,y,z,w) and lossy scale of a Transform, composed
+    up the m_Father chain — what a camera or light needs to be placed."""
+    chain = []
+    while tr is not None and len(chain) < limit:
+        chain.append(tr)
+        tr = _father(tr)
+    pos, rot, scl = (0.0, 0.0, 0.0), (0.0, 0.0, 0.0, 1.0), (1.0, 1.0, 1.0)
+    for t in reversed(chain):
+        lp = _vec(getattr(t, "m_LocalPosition", None), ("x", "y", "z")) or [0, 0, 0]
+        lr = _vec(getattr(t, "m_LocalRotation", None)) or [0, 0, 0, 1]
+        ls = _vec(getattr(t, "m_LocalScale", None), ("x", "y", "z")) or [1, 1, 1]
+        off = _qrot(rot, (lp[0] * scl[0], lp[1] * scl[1], lp[2] * scl[2]))
+        pos = (pos[0] + off[0], pos[1] + off[1], pos[2] + off[2])
+        rot = _qmul(rot, tuple(lr))
+        scl = (scl[0] * ls[0], scl[1] * ls[1], scl[2] * ls[2])
+    return {"position": list(pos), "rotation": list(rot), "lossy_scale": list(scl)}
+
+
+def _placed(component):
+    """{gameObject, path, world TRS} of the GameObject a component sits on."""
+    go = _deref(getattr(component, "m_GameObject", None))
+    if go is None:
+        return {}
+    return dict({"gameObject": go.m_Name, "path": _go_path(go)}, **_world_trs(_transform_of(go)))
+
+
 def _father(tr):
     """Parent Transform through m_Father — the engine's own back-link."""
     return _deref(getattr(tr, "m_Father", None)) if tr is not None else None
@@ -782,6 +839,10 @@ def _mesh_ref(component, externals_of):
 # Extractor
 # ---------------------------------------------------------------------------
 
+# Path ids of the meshes in "Library/unity default resources" (stable across versions)
+BUILTIN_MESHES = {10202: "Cube", 10206: "Cylinder", 10207: "Sphere", 10208: "Capsule",
+                  10209: "Plane", 10210: "Quad"}
+
 HEADER_FIELDS = ("m_GameObject", "m_Enabled", "m_Script", "m_Name", "m_EditorHideFlags",
                  "m_EditorClassIdentifier")
 
@@ -804,6 +865,7 @@ class Extractor:
         self.texture_by_name = collections.defaultdict(list)
         self.sprite_files = {}    # sprite id -> path
         self.mesh_index = {}      # mesh id -> {name, file, submeshes}
+        self.skins = {}           # mesh id -> (bindposes, bone indices, bone weights)
         self.materials = {}       # material id -> payload (materials.json)
         self.objects = list(self.env.objects)
         self.total_objects = len(self.objects)
@@ -955,7 +1017,7 @@ class Extractor:
             path = os.path.join(sub, safe_name(cls) + ".jsonl")
             with open(path, "w") as f:
                 for row in rows:
-                    f.write(json.dumps(row, ensure_ascii=False, default=str) + "\n")
+                    f.write(json.dumps(_finite(row), ensure_ascii=False, default=str, allow_nan=False) + "\n")
             index.append({"assembly": asm, "class": cls, "count": len(rows),
                           "values_complete": sum(1 for r in rows if r["values_complete"]),
                           "file": os.path.relpath(path, self.out)})
@@ -999,7 +1061,7 @@ class Extractor:
         path = os.path.join(self.out, rel)
         os.makedirs(os.path.dirname(path), exist_ok=True)
         with open(path, "w") as f:
-            json.dump(payload, f, indent=1, ensure_ascii=False, default=str)
+            _dump_json(payload, f, indent=1, ensure_ascii=False, default=str)
         return path
 
     def externals_of(self, obj):
@@ -1122,6 +1184,9 @@ class Extractor:
                 f.write(body)
             self.mesh_files[oid(o)] = path
             self.mesh_by_name[m.m_Name].append(oid(o))
+            skin = _skin_of(m)
+            if skin is not None:
+                self.skins[oid(o)] = skin
             self.mesh_index[oid(o)] = {"name": m.m_Name, "file": os.path.basename(path),
                                        "submeshes": len(getattr(m, "m_SubMeshes", None) or [])}
             self.counts["meshes"] += 1
@@ -1314,7 +1379,7 @@ class Extractor:
             path = self.alloc.path(d, name.replace("/", "_"), ".json",
                                    f"shader_{o.path_id}")
             with open(path, "w") as f:
-                json.dump(payload, f, indent=1, ensure_ascii=False, default=str)
+                _dump_json(payload, f, indent=1, ensure_ascii=False, default=str)
             index.append({"name": name, "origin": origin, "note": note,
                           "properties": len(props), "file": os.path.basename(path)})
             self.counts["shaders"] += 1
@@ -1390,7 +1455,7 @@ class Extractor:
                         }
             path = self.alloc.path(d, go_name, ".json", f"ps_{o.path_id}")
             with open(path, "w") as f:
-                json.dump(payload, f, indent=1, ensure_ascii=False, default=str)
+                _dump_json(payload, f, indent=1, ensure_ascii=False, default=str)
             by_go.setdefault(go_name, []).append(path)
             self.counts["particles"] += 1
         return by_go
@@ -1479,7 +1544,7 @@ class Extractor:
                     self._dump_struct(getattr(sm, "data", sm), depth=12, cap=4096))
             path = self.alloc.path(ctrl_dir, ac.m_Name, ".json", f"controller_{o.path_id}")
             with open(path, "w") as f:
-                json.dump(payload, f, indent=1, ensure_ascii=False, default=str)
+                _dump_json(payload, f, indent=1, ensure_ascii=False, default=str)
             for c in clips:
                 clip_owner[c] = ac.m_Name
             controllers.append(ac.m_Name)
@@ -1518,7 +1583,7 @@ class Extractor:
                 payload["curves"] = self._decode_muscle_clip(cl, payload)
             path = self.alloc.path(clip_dir, cl.m_Name, ".json", f"clip_{o.path_id}")
             with open(path, "w") as f:
-                json.dump(payload, f, indent=1, ensure_ascii=False, default=str)
+                _dump_json(payload, f, indent=1, ensure_ascii=False, default=str)
             self.counts["animation_clips"] += 1
         return {"controllers": controllers, "tos_entries": len(tos)}
 
@@ -1615,7 +1680,7 @@ class Extractor:
                 continue
             payload = self._dump_struct(s, depth=8, cap=4096)
             with open(os.path.join(d, wanted[t] + ".json"), "w") as f:
-                json.dump(payload, f, indent=1, ensure_ascii=False, default=str)
+                _dump_json(payload, f, indent=1, ensure_ascii=False, default=str)
             written[wanted[t]] = payload
             self.counts["project_settings"] += 1
         self._write_settings_readme(d, written, failed)
@@ -1711,7 +1776,7 @@ class Extractor:
                        "tree": self._rect_tree(go, 0, set())}
             path = self.alloc.path(d, go.m_Name, ".json", f"canvas_{o.path_id}")
             with open(path, "w") as f:
-                json.dump(payload, f, indent=1, ensure_ascii=False, default=str)
+                _dump_json(payload, f, indent=1, ensure_ascii=False, default=str)
             n += 1
             self.counts["ui_canvases"] += 1
         return n
@@ -1823,7 +1888,19 @@ class Extractor:
             self._tree_lines(ch, depth + 1, lines, max_depth)
 
     def _scene_objects(self, fname, objs, d):
-        payload = {"lights": [], "cameras": [], "audio_sources": [], "render_settings": None}
+        payload = {"lights": [], "cameras": [], "audio_sources": [], "render_settings": None,
+                   "transforms": []}
+        # every GameObject of the scene with its world placement: level content is
+        # often spawned under a scene anchor (a spawn-point object), and rebuilding a
+        # level means composing with it
+        for o in objs:
+            if o.type.name not in ("Transform", "RectTransform"):
+                continue
+            t = _read(o)
+            go = _deref(getattr(t, "m_GameObject", None)) if t is not None else None
+            if go is None:
+                continue
+            payload["transforms"].append(dict({"id": oid(go), "path": _go_path(go)}, **_world_trs(t)))
         for o in objs:
             t = o.type.name
             if t == "Light":
@@ -1831,6 +1908,7 @@ class Extractor:
                 if l is None:
                     continue
                 payload["lights"].append({
+                    **_placed(l),
                     "type": getattr(l, "m_Type", None),
                     "color": _vec(getattr(l, "m_Color", None), ("r", "g", "b", "a")),
                     "intensity": getattr(l, "m_Intensity", None),
@@ -1841,6 +1919,7 @@ class Extractor:
                 if c is None:
                     continue
                 payload["cameras"].append({
+                    **_placed(c),
                     "orthographic": getattr(c, "orthographic", None),
                     "orthographic_size": getattr(c, "orthographic_size", None),
                     "fov": getattr(c, "field_of_view", None),
@@ -1863,7 +1942,7 @@ class Extractor:
                 if r is not None:
                     payload["render_settings"] = self._dump_struct(r, depth=6)
         with open(os.path.join(d, f"{fname}.objects.json"), "w") as f:
-            json.dump(payload, f, indent=1, ensure_ascii=False, default=str)
+            _dump_json(payload, f, indent=1, ensure_ascii=False, default=str)
 
     # -- structural entity discovery ---------------------------------------
     def discover_prefab_roots(self, max_depth=4):
@@ -2118,6 +2197,13 @@ class EntityBuilder:
                     n.setdefault("scripts", []).append({"class": cls, "id": oid(c)})
                     continue
                 n["components"].append(tn)
+                if tn == "SkinnedMeshRenderer":
+                    bones = []
+                    for bp in (getattr(c, "m_Bones", None) or []):
+                        bt = _deref(bp)
+                        bg = _reader_of(getattr(bt, "m_GameObject", None)) if bt is not None else None
+                        bones.append(oid(bg) if bg is not None else None)
+                    n["bones"] = bones
                 if tn in ("MeshFilter", "SkinnedMeshRenderer"):
                     mr = _reader_of(getattr(c, "m_Mesh", None))
                     mname, kind = _mesh_ref(c, self.x.externals_of)
@@ -2125,6 +2211,9 @@ class EntityBuilder:
                         n["mesh"], n["mesh_id"] = mname, oid(mr) if mr is not None else None
                     elif kind:
                         n["mesh"] = f"<{kind}>"
+                        if kind.startswith("builtin:"):
+                            pid = getattr(getattr(c, "m_Mesh", None), "m_PathID", None)
+                            n["builtin_mesh"] = BUILTIN_MESHES.get(pid, f"unknown:{pid}")
                 if tn in ("MeshRenderer", "SkinnedMeshRenderer", "SpriteRenderer",
                           "ParticleSystemRenderer"):
                     for mp in (getattr(c, "m_Materials", None) or []):
@@ -2137,8 +2226,23 @@ class EntityBuilder:
                     sp = _read(sr) if sr is not None else None
                     if sp is not None and sp.m_Name:
                         n["sprite"], n["sprite_id"] = sp.m_Name, oid(sr)
+                        src = self.x.sprite_files.get(oid(sr))
+                        n["sprite_file"] = os.path.basename(src) if src else None
+                        pv = _vec(getattr(sp, "m_Pivot", None), ("x", "y"))
+                        n["sprite_ppu"] = float(getattr(sp, "m_PixelsToUnits", 100) or 100)
+                        n["sprite_pivot"] = pv
+                        n["sprite_color"] = _vec(getattr(c, "m_Color", None), ("r", "g", "b", "a"))
                 if tn == "Rigidbody":
                     n["rigidbody"] = rigidbody_dict(c)
+                if tn.endswith("Collider"):
+                    cd = collider_dict(c, tn)
+                    if tn == "MeshCollider":
+                        cm = _reader_of(getattr(c, "m_Mesh", None))
+                        src = self.x.mesh_files.get(oid(cm)) if cm is not None else None
+                        cd["mesh_file"] = os.path.basename(src) if src else None
+                    n.setdefault("colliders", []).append(cd)
+                if tn.endswith("Joint"):
+                    n.setdefault("joints", []).append(joint_dict(c, tn))
                 if tn == "ParticleSystem":
                     n["particle"] = True
             if n["mesh_id"] in self.x.mesh_index:
@@ -2390,6 +2494,7 @@ def write_entity_folders(x, entities, level_analysis, particles_by_go):
                 for mid, md in agg["materials"].items():
                     tex = {k: tex_file[t] for k, t in (md.get("texture_ids") or {}).items()
                            if t in tex_file}
+                    md["texture_files"] = tex       # slot -> textures/<file>, for importers
                     f.write(mtl_text(mtl_name[mid], tex, md.get("colors"), md.get("floats")))
                     f.write("\n")
         # each mesh gets the materials of the node that carries it, slot by slot
@@ -2403,7 +2508,8 @@ def write_entity_folders(x, entities, level_analysis, particles_by_go):
                     conflicts.append(n["path"])
                 mesh_mat.setdefault(n["mesh_id"], slots)
         first_mat = next(iter(mtl_name.values()), None)
-        whole_files = _copy_meshes(x, agg["meshes"], d, mtl_file, first_mat, mesh_mat)
+        baked = bake_skinned_nodes(x, agg.get("nodes") or [])
+        whole_files = _copy_meshes(x, agg["meshes"], d, mtl_file, first_mat, mesh_mat, baked)
         broken_files = []
         if agg["broken_pieces"]:
             bd = os.path.join(d, "broken")
@@ -2412,7 +2518,15 @@ def write_entity_folders(x, entities, level_analysis, particles_by_go):
             broken_files = _copy_meshes(
                 x, agg["broken_pieces"], bd,
                 os.path.join("..", mtl_file) if mtl_file else None,
-                first_mat, mesh_mat)
+                first_mat, mesh_mat, baked)
+        sprite_nodes = [n for n in agg.get("nodes") or [] if n.get("sprite_id") in x.sprite_files]
+        if sprite_nodes:
+            sd = os.path.join(d, "sprites")
+            os.makedirs(sd, exist_ok=True)
+            for n in sprite_nodes:
+                dst = os.path.join(sd, os.path.basename(x.sprite_files[n["sprite_id"]]))
+                if not os.path.exists(dst):
+                    _link_or_copy(x.sprite_files[n["sprite_id"]], dst)
         anim_files = _copy_animations(x, agg, d)
         part_files = _copy_particles(x, agg, d)
         mesh_name = lambda mid: (x.mesh_index.get(mid) or {}).get("name", mid)
@@ -2448,7 +2562,7 @@ def write_entity_folders(x, entities, level_analysis, particles_by_go):
             "geometry_status": _geometry_status(agg),
         }
         with open(os.path.join(d, "entity.json"), "w") as f:
-            json.dump(info, f, indent=1, ensure_ascii=False, default=str)
+            _dump_json(info, f, indent=1, ensure_ascii=False, default=str)
         with open(os.path.join(d, "README.md"), "w") as f:
             f.write(_entity_readme(info))
         with open(os.path.join(d, "nodes.tree.txt"), "w") as f:
@@ -2456,7 +2570,7 @@ def write_entity_folders(x, entities, level_analysis, particles_by_go):
         index.append(info)
         x.counts["entities"] += 1
     with open(os.path.join(root, "_index.json"), "w") as f:
-        json.dump(index, f, indent=1, ensure_ascii=False, default=str)
+        _dump_json(index, f, indent=1, ensure_ascii=False, default=str)
     return index
 
 
@@ -2501,10 +2615,118 @@ def _resolve_node_files(nodes, x):
     return nodes
 
 
-def _copy_meshes(x, mesh_ids, dest, mtl_file, mat_name, mesh_mat=None):
+def _skin_of(mesh):
+    """(bindposes 4x4[], bone indices [n,4], weights [n,4]) of a skinned mesh, or None."""
+    try:
+        from UnityPy.helpers.MeshHelper import MeshHandler
+        import numpy as np
+    except Exception:
+        return None
+    binds = getattr(mesh, "m_BindPose", None) or []
+    if not binds:
+        return None
+    try:
+        h = MeshHandler(mesh)
+        h.process()
+    except Exception:
+        return None
+    n = len(h.m_Vertices or [])
+    if not h.m_BoneIndices or len(h.m_BoneIndices) != n:
+        return None
+    bi = np.array([tuple(t) if isinstance(t, (list, tuple)) else (t,) for t in h.m_BoneIndices], dtype=np.int64)
+    if h.m_BoneWeights is None:
+        # one influence per vertex: Unity stores only the index, the weight is 1
+        bw = np.zeros(bi.shape, dtype=np.float64)
+        bw[:, 0] = 1.0
+    else:
+        if len(h.m_BoneWeights) != n:
+            return None
+        bw = np.array([tuple(t) if isinstance(t, (list, tuple)) else (t,) for t in h.m_BoneWeights], dtype=np.float64)
+        if bw.shape[1] < bi.shape[1]:       # weights for the first k influences only
+            bw = np.concatenate([bw, np.zeros((n, bi.shape[1] - bw.shape[1]))], axis=1)
+        bi = bi[:, :bw.shape[1]]
+    P = np.array([[[getattr(b, f"e{r}{c}") for c in range(4)] for r in range(4)] for b in binds], dtype=np.float64)
+    return P, bi, bw
+
+
+def _trs_matrix(n):
+    import numpy as np
+    x, y, z, w = n.get("localRotation") or [0, 0, 0, 1]
+    R = np.array([[1 - 2 * (y * y + z * z), 2 * (x * y - z * w), 2 * (x * z + y * w)],
+                  [2 * (x * y + z * w), 1 - 2 * (x * x + z * z), 2 * (y * z - x * w)],
+                  [2 * (x * z - y * w), 2 * (y * z + x * w), 1 - 2 * (x * x + y * y)]])
+    M = np.eye(4)
+    M[:3, :3] = R * np.array(n.get("localScale") or [1, 1, 1])[None, :]
+    M[:3, 3] = n.get("localPosition") or [0, 0, 0]
+    return M
+
+
+def bake_skinned_nodes(x, nodes):
+    """Pose every skinned mesh by its skeleton, as Unity draws it, and express the
+    result in the renderer node's own space: v' = W_node^-1 * sum_i w_i * W_bone_i * P_i * v.
+
+    A SkinnedMeshRenderer's vertices are in bind space, not node space; drawn
+    as a plain mesh at the node they land wherever the node happens to be (a
+    launcher body hung mid-air in front of the level instead of resting on its
+    wheels). Bone transforms are the prefab's saved pose. Returns mesh id ->
+    posed OBJ text; nodes get `skin_baked` true/false (+ reason)."""
+    if not x.skins:
+        return {}
+    import numpy as np
+    world, idx = {}, {n["id"]: i for i, n in enumerate(nodes)}
+
+    def W(i):
+        if i not in world:
+            p = nodes[i]["parent"]
+            world[i] = (W(p) if p >= 0 else np.eye(4)) @ _trs_matrix(nodes[i])
+        return world[i]
+
+    out = {}
+    for i, n in enumerate(nodes):
+        mid, bones = n.get("mesh_id"), n.get("bones")
+        if not mid or bones is None or mid not in x.skins:
+            continue
+        P, bi, bw = x.skins[mid]
+        missing = [b for b in bones if b not in idx]
+        if missing or len(bones) < len(P):
+            n["skin_baked"], n["skin_note"] = False, f"{len(missing)} bone(s) outside this object"
+            continue
+        if mid in out:
+            n["skin_baked"], n["skin_note"] = False, "mesh shared by two skinned nodes; first pose kept"
+            continue
+        inv = np.linalg.inv(W(i))
+        B = np.stack([inv @ W(idx[b]) @ P[k] for k, b in enumerate(bones[:len(P)])])     # [bones,4,4]
+        with open(x.mesh_files[mid]) as f:
+            lines = f.read().split("\n")
+        vi = [k for k, l in enumerate(lines) if l.startswith("v ")]
+        ni = [k for k, l in enumerate(lines) if l.startswith("vn ")]
+        if len(vi) != len(bi):
+            n["skin_baked"], n["skin_note"] = False, "vertex count differs from skin data"
+            continue
+        V = np.array([[float(t) for t in lines[k].split()[1:4]] for k in vi])
+        V[:, 0] *= -1                                             # OBJ is right-handed
+        Mv = np.einsum("vk,vkab->vab", bw, B[np.clip(bi, 0, len(B) - 1)])  # per-vertex blend
+        Vh = np.concatenate([V, np.ones((len(V), 1))], axis=1)
+        Vp = np.einsum("vab,vb->va", Mv, Vh)[:, :3]
+        for k, row in zip(vi, Vp):
+            lines[k] = "v {:.9G} {:.9G} {:.9G}".format(-row[0], row[1], row[2])
+        if len(ni) == len(vi):
+            Nn = np.array([[float(t) for t in lines[k].split()[1:4]] for k in ni])
+            Nn[:, 0] *= -1
+            Nr = np.einsum("vab,vb->va", Mv[:, :3, :3], Nn)
+            Nr /= np.maximum(np.linalg.norm(Nr, axis=1, keepdims=True), 1e-12)
+            for k, row in zip(ni, Nr):
+                lines[k] = "vn {:.9G} {:.9G} {:.9G}".format(-row[0], row[1], row[2])
+        out[mid] = "\n".join(lines)
+        n["skin_baked"] = True
+    return out
+
+
+def _copy_meshes(x, mesh_ids, dest, mtl_file, mat_name, mesh_mat=None, baked=None):
     """`mesh_mat` maps mesh id -> the slot-ordered material names of the node that
-    carries it, so each sub-mesh group gets its own `usemtl`."""
-    mesh_mat = mesh_mat or {}
+    carries it, so each sub-mesh group gets its own `usemtl`. `baked` maps mesh id
+    -> OBJ text already posed by its skeleton (see bake_skinned_nodes)."""
+    mesh_mat, baked = mesh_mat or {}, baked or {}
     out = []
     for m in mesh_ids:
         src = x.mesh_files.get(m)
@@ -2512,7 +2734,13 @@ def _copy_meshes(x, mesh_ids, dest, mtl_file, mat_name, mesh_mat=None):
             continue
         dst = os.path.join(dest, os.path.basename(src))
         use = mesh_mat.get(m) or ([mat_name] if mat_name else None)
-        if mtl_file and use:
+        if m in baked:
+            body = baked[m]
+            if mtl_file and use:
+                body = attach_material_to_obj(body, mtl_file, use)
+            with open(dst, "w") as f:
+                f.write(body)
+        elif mtl_file and use:
             with open(src) as f:
                 body = f.read()
             body = attach_material_to_obj(body, mtl_file, use)
@@ -2808,11 +3036,19 @@ def copy_unity_importer(out):
     os.makedirs(d, exist_ok=True)
     dst = os.path.join(d, "ImportExtracted.cs")
     shutil.copy2(src, dst)
+    for extra in ("ExtractedNode.cs", "VerifyImport.cs"):
+        e = os.path.join(os.path.dirname(src), extra)
+        if os.path.exists(e):
+            shutil.copy2(e, os.path.join(d, extra))
     with open(os.path.join(d, "README.md"), "w") as f:
         f.write("# Unity importer\n\n"
-                "1. Copy `ImportExtracted.cs` into your project's `Assets/Editor/`.\n"
-                "2. Run **Tools > Clone App > Import Extracted Assets**.\n"
-                "3. Point it at this `game-assets/` folder.\n\n"
+                "1. Copy `ImportExtracted.cs` and `VerifyImport.cs` into `Assets/Editor/`, and\n"
+                "   `ExtractedNode.cs` into any non-Editor folder (e.g. `Assets/Scripts/`) —\n"
+                "   a component defined in an Editor folder cannot be added to a prefab.\n"
+                "2. Run **Tools > Clone App > Import Extracted Assets**, or batch:\n"
+                "   `Unity -batchmode -executeMethod ImportExtracted.ImportBatch -cloneSource <game-assets>`.\n"
+                "3. Verify: `python3 <clone-app>/scripts/expected-import.py <game-assets> > expect.json`, then\n"
+                "   `Unity -batchmode -executeMethod VerifyImport.Run -cloneSource <game-assets> -cloneExpect expect.json`.\n\n"
                 "It copies meshes and textures in, rebuilds materials from the "
                 "recorded float/colour/texture values, and saves one prefab per "
                 "entity with its colliders, rigidbody and joints applied.\n\n"
@@ -3066,7 +3302,7 @@ def main(argv=None):
                                          for k in ("levels", "distinct_entities",
                                                    "ab_variants")}})
     with open(os.path.join(out, "manifest.json"), "w") as f:
-        json.dump(manifest, f, indent=1, ensure_ascii=False, default=str)
+        _dump_json(manifest, f, indent=1, ensure_ascii=False, default=str)
 
     # Nothing is deleted automatically: later phases read back from the
     # unpacked tree, and removal is the user's call via clean-workdir.sh.
