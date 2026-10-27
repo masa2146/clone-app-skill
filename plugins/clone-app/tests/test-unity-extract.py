@@ -235,4 +235,15 @@ with tempfile.TemporaryDirectory() as t:
 check("pick keeps only the named fields",
       ux._pick({"m_Sprite": 1, "m_Color": 2, "junk": 3}, ["m_Sprite", "m_Color"]) == {"m_Sprite": 1, "m_Color": 2})
 
+# --- world placement maths (cameras, lights, scene anchors) --------------------
+q90y = (0.0, 0.7071068, 0.0, 0.7071068)
+r = ux._qrot(q90y, (1.0, 0.0, 0.0))
+check("90 deg about y turns +x into -z", abs(r[0]) < 1e-6 and abs(r[2] + 1) < 1e-6)
+q180 = ux._qmul(q90y, q90y)
+r2 = ux._qrot(q180, (1.0, 0.0, 0.0))
+check("two 90 deg turns compose to 180", abs(r2[0] + 1) < 1e-6)
+check("JSON never gets Infinity/NaN (a C# reader looped on them)",
+      ux._finite({"breakForce": float("inf"), "x": [float("nan"), 1.0]}) ==
+      {"breakForce": "Infinity", "x": ["NaN", 1.0]})
+
 sys.exit(1 if fails else 0)
