@@ -1,5 +1,6 @@
 # Opt-in extraction venv (setup-extraction-venv.sh). Nothing here is installed
 # into the system python; the shipped core scripts and tests stay stdlib-only.
-UnityPy>=1.20      # Unity serialized-file reader — assets, prefabs, settings
+UnityPy>=1.25,<2  # Unity serialized-file reader; 1.25 has the TypeTreeGenerator hook, 2.x changes the API
 numpy>=1.24        # mesh preview rasteriser
 Pillow>=10.0       # PNG decode/encode, contact sheets
+TypeTreeGeneratorAPI==0.0.10  # rebuilds stripped MonoBehaviour type trees from libil2cpp.so + metadata (MIT, UnityPy's author)

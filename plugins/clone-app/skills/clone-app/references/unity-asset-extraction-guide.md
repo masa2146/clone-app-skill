@@ -116,18 +116,26 @@ meshes called `BezierCurve.041`. So discovery is **structural first**:
 | Particles | every module as JSON | re-enter into a `ParticleSystem`; no importer does this automatically |
 | Animations | clips + controllers as JSON | check `curves_status` per clip; Mecanim curves are decoded from Streamed/Dense/Constant containers, legacy clips come out directly |
 | Physics | `physics.json` + `project-settings/` | copy the constants **before** hand-tuning; `project-settings/README.md` lists what differs from Unity defaults |
-| Prefab structure | hierarchy + every engine component value in `entity.json` | `unity-import/ImportExtracted.cs` rebuilds it; custom script field values are the one real gap |
+| Prefab structure | hierarchy + every engine component value in `entity.json`, depth-first, each node with `id`, `parent_name`, `path` and slot-ordered `materials`; `nodes.tree.txt` is the same tree indented for a human | `unity-import/ImportExtracted.cs` rebuilds it (every OBJ group as a sub-mesh) |
+| Script values | `scripts/<Assembly>/<Class>.jsonl` (one row per MonoBehaviour, by id), `scripts/references.tsv`, `scripts/script-fields.tsv` | type trees rebuilt from `libil2cpp.so` + `global-metadata.dat` (TypeTreeGeneratorAPI); balance tables, tuning, which prefab a controller spawns |
+| UI | `ui/*.json`: per node `id`, rect, and decoded `ui` values — the Image's bound `m_Sprite`, TMP text/size, Button wiring; the canvas' `scaler` | `gen-ui-map.py` turns it into pixels on a target screen (`UNITS.md`, `px_1080x2400`, `painted_px`) |
 
-## Genuinely unrecoverable — exactly three things
+## Identity: never join by name
 
-1. **MonoBehaviour / ScriptableObject field values** — type trees stripped in an
-   IL2CPP release build. This is what costs you balance tables, tuning configs
-   and LiveOps parameters. Class *names* survive in `ARCHITECTURE.md`.
-2. **Shader HLSL / compiled bytecode** — compiled per platform.
-3. **C# method bodies** — AOT-compiled into `libil2cpp.so`.
+Every record carries `id` = `<serialized file>:<path id>`. Names repeat: two
+materials, two rigidbodies, two meshes with one name are normal. `materials.json`
+is keyed by id with a `name` and `name_dup`; `physics.json` → `rigidbodies` is a
+list with `gameObject`, `gameObject_id`, `path` and `display_candidate` (kinematic
+or jointed: often a menu prop that shares the gameplay object's name).
 
-Any other "not recoverable" claim in a report is a bug. If something is missing
-it is because it was not extracted, not because it could not be.
+## Genuinely absent from the data files — two things
+
+1. **Shader HLSL / compiled bytecode** — compiled per platform.
+2. **C# method bodies** — AOT-compiled into `libil2cpp.so` (disassemble with
+   capstone when a formula is needed).
+
+Script field values used to be listed here; they are decoded since 0.3. Any other
+"not recoverable" claim in a report is a bug — run `check-extraction.py`.
 
 ## Honesty rules the extractor enforces
 
@@ -144,3 +152,42 @@ it is because it was not extracted, not because it could not be.
 Extracted art is copyrighted. The transferable output is the **structure** —
 level schema, physics constants, entity taxonomy, mechanic-introduction curve,
 architecture map. Treat the art as reference and recreate it in the same style.
+
+## The prefab node tree (`entity.json` → `nodes`)
+
+An entity folder is **not** a bag of OBJs. Each `entity.json` carries `nodes`: the
+object's real hierarchy, one entry per GameObject.
+
+| field | meaning |
+|---|---|
+| `name` | the node's name in the original prefab |
+| `parent` | index into `nodes`; `-1` for the root |
+| `depth` | distance from the root |
+| `localPosition` / `localRotation` / `localScale` | the node's own transform |
+| `mesh` / `mesh_file` | the mesh this node carries, and the OBJ on disk |
+| `materials` | material names **in slot order** — slot order maps to sub-mesh order |
+| `active` | whether the node ships enabled |
+| `fracture` | debris: the node's own name says so, or an ancestor (`Break`/`Crack`/`Debris`/`Shatter`) does |
+
+**Why it exists.** Without it a folder holds the body, the cracked variant and the
+fracture debris side by side with nothing saying which is which — so a rebuild
+picks the largest mesh, throws away the planks and the trim, and then draws the
+missing parts by hand. A multi-plank block (`PixelWoodBlockPlankModel`,
+`BreakWoodPlanks`) cannot be reconstructed from a single merged body at all.
+
+**Rules:**
+- Build the hierarchy from `nodes`, not from `whole_mesh_files`. The flat list is a
+  convenience index, not a recipe.
+- Apply each node's local transform. Parts stacked at the origin are the tell that
+  this was skipped.
+- Assign `materials` **in order** to `sharedMaterials`. One material on a
+  multi-slot renderer paints the whole object.
+- Parent `fracture` nodes under a disabled root; they are the break state, not the
+  intact object.
+- `materials.mtl` in the entity folder carries **every** material of the entity,
+  and each OBJ's `usemtl` names the material of the node that carries it.
+
+`unity-import/ImportExtracted.cs` consumes all of this: it rebuilds the tree,
+applies transforms, creates one Unity material per extracted material with its own
+textures, and puts debris under a disabled `Broken` root. It falls back to the old
+flat build only when `nodes` is absent (an older extraction).

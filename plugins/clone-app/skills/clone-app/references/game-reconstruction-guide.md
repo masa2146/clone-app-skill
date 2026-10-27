@@ -93,8 +93,8 @@ $WORK/deliverables/reconstruction/
 ### README.md
 Index table, the evidence legend above, a Sources list with real counts pulled
 from the artifacts, and a closing paragraph naming **the hard limit**: method
-bodies are AOT-compiled and MonoBehaviour/ScriptableObject field values are
-stripped, so mechanisms are recovered and numbers are not.
+bodies are AOT-compiled, so formulas are inferred; field values (numbers, tuning,
+prefab links) are decoded in `game-assets/scripts/` and cited from there.
 
 ### 01-ARCHITECTURE.md
 - Engine, build type, game assemblies with type counts **[D/S]**
@@ -205,9 +205,9 @@ on a fact, one of them read the artifacts wrong.
 
 ## Honesty rules
 
-- Only three things are genuinely unrecoverable (field values, shader bytecode,
-  method bodies). Any other "not recoverable" claim is a tooling gap to report,
-  not a limitation to assert.
+- Only two things are genuinely absent (shader bytecode, method bodies). Field
+  values are in `game-assets/scripts/`. Any other "not recoverable" claim is a
+  tooling gap to report, not a limitation to assert.
 - Never present an inferred number as measured.
 - If a subsystem could not be covered, say so in `README.md` rather than leaving
   a gap the reader has to notice.
