@@ -110,6 +110,30 @@ def _dump_json(payload, f, **kw):
     json.dump(_finite(payload), f, allow_nan=False, **kw)
 
 
+LEVEL_KEY_RE = re.compile(r"entit|placement|spawn|grid|cell|tile|obstacle|wave|layout|prefab|bounds|path|spline",
+                          re.I)
+
+
+def _text_profile(name, file, raw):
+    """What a TextAsset is, from its content: JSON (top keys, how many entries),
+    binary or text — and whether it looks like level/map data (positions,
+    placements, grids). Level files are often named neither "level_N" nor numeric."""
+    out = {"name": name, "file": file, "bytes": len(raw)}
+    try:
+        data = json.loads(raw.decode("utf-8"))
+    except Exception:
+        out["kind"] = "binary" if b"\x00" in raw[:4096] else "text"
+        return out
+    out["kind"] = "json"
+    keys = list(data.keys())[:24] if isinstance(data, dict) else []
+    out["keys"] = keys
+    blob = json.dumps(data)[:200000]
+    hits = len(LEVEL_KEY_RE.findall(" ".join(keys))) + blob.count('"position"') + blob.count('"Position"') \
+        + blob.count('"x":') // 50
+    out["level_like"] = hits >= 3 or (isinstance(data, list) and len(data) > 20 and '"x"' in blob)
+    return out
+
+
 def safe_name(name, fallback="unnamed", limit=120):
     """Filesystem-safe asset name. Empty/whitespace names get the fallback."""
     n = SAFE_RE.sub("_", (name or "").strip())
@@ -573,6 +597,14 @@ def make_script_types(unity_version, lib_path, meta_path):
     return g
 
 
+def _metadata_version(path):
+    try:
+        with open(path, "rb") as f:
+            return struct.unpack("<i", f.read(8)[4:8])[0]
+    except Exception:
+        return None
+
+
 def oid(o):
     """Stable identity of a Unity object: `<serialized file>:<path id>`. Names are
     not unique (a 30 kg showcase "Ball" shadowed the 1.2 kg ball the game fires)."""
@@ -867,10 +899,12 @@ class Extractor:
         self.mesh_index = {}      # mesh id -> {name, file, submeshes}
         self.skins = {}           # mesh id -> (bindposes, bone indices, bone weights)
         self.materials = {}       # material id -> payload (materials.json)
+        self.text_index = []      # every non-level TextAsset: size, kind, keys
         self.objects = list(self.env.objects)
         self.total_objects = len(self.objects)
         self.type_counts = collections.Counter(o.type.name for o in self.objects)
         self.script_types = None
+        self.script_types_error = None
         self._script_cache, self._name_cache, self._mb_cache = {}, {}, {}
         lib, meta = il2cpp
         if lib and meta and self.objects:
@@ -881,11 +915,27 @@ class Extractor:
                 self.script_types = make_script_types(version, lib, meta)
                 self.env.typetree_generator = self.script_types
             except Exception as e:  # noqa: BLE001 — a missing native lib must not stop extraction
+                self.script_types_error = e
                 self.notes.append(f"Script type trees could not be rebuilt from {os.path.basename(lib)} "
-                                  f"({type(e).__name__}: {e}); MonoBehaviour values are header-only.")
+                                  f"({type(e).__name__}: {e}); MonoBehaviour values are header-only "
+                                  "except inside asset bundles, which carry their own type trees.")
         elif self.type_counts.get("MonoBehaviour"):
             self.notes.append("No libil2cpp.so + global-metadata.dat found; MonoBehaviour field "
                               "values could not be decoded (a Mono build needs Managed/*.dll).")
+        if lib and meta and self.script_types is None:
+            # the values exist; this run could not read them. Not silent: the
+            # self-check fails on it and the console says why
+            err = getattr(self, "script_types_error", None)
+            version = _metadata_version(meta)
+            if isinstance(err, ImportError):
+                why = ("TypeTreeGeneratorAPI is not installed — run through unity-assets.sh (it builds "
+                       "the extraction venv), not with the system python")
+            else:
+                why = (f"TypeTreeGeneratorAPI could not load this build (global-metadata v{version}; "
+                       f"{type(err).__name__}: {err}) — newer than its LibCpp2IL supports")
+            print(f"WARNING: script type trees not rebuilt: {why}. Only scripts inside asset "
+                  "bundles will carry values.", file=sys.stderr)
+            self.notes.append("Script values: " + why + ".")
 
     # -- script values -----------------------------------------------------
     def script_of(self, mb):
@@ -963,9 +1013,10 @@ class Extractor:
             return str(v)
         return v
 
-    def mb_values(self, mb):
+    def mb_values(self, mb, cache=True):
         """(class, fields, complete?) for a MonoBehaviour — the values a stripped
-        IL2CPP build hides, rebuilt from the generated type tree. Cached."""
+        IL2CPP build hides, rebuilt from the generated type tree. Cached unless
+        `cache` is False (the full scripts/ export streams instead)."""
         r = getattr(mb, "object_reader", None) or mb
         key = oid(r)
         if key in self._mb_cache:
@@ -975,6 +1026,10 @@ class Extractor:
         full = f"{ns}.{cn}" if ns else cn
         if self.script_types is not None and asm and cn:
             complete = self.script_types.get_nodes_up(asm, full) is not None
+        if not complete:
+            # asset bundles ship the type trees of the scripts they hold: those
+            # values read without any generator
+            complete = getattr(getattr(r, "serialized_type", None), "node", None) is not None
         try:
             raw = r.read_typetree(wrap=False, check_read=False)
             fields = {k: self.plain(r, v) for k, v in raw.items() if k not in HEADER_FIELDS}
@@ -982,56 +1037,59 @@ class Extractor:
             complete = False
             self.errors["MonoBehaviour:values"] += 1
         out = ({"assembly": asm, "namespace": ns, "class": cn}, fields, complete)
-        self._mb_cache[key] = out
+        if cache:
+            self._mb_cache[key] = out
         return out
 
     def export_scripts(self):
         """Every MonoBehaviour's field values, one JSONL per class, plus a flat
         table of every object reference a script holds. `grep BallPrefab
         scripts/references.tsv` answers "which prefab does the game fire" — the
-        question a name search answered wrongly."""
+        question a name search answered wrongly.
+
+        Streamed class by class: a city game with 275k MonoBehaviours held every
+        value in memory at once and peaked at 6.4 GB."""
         d = self.dir("scripts")
-        by_class = collections.defaultdict(list)
-        refs = []
-        read = complete = 0
+        by_class = collections.defaultdict(list)          # (asm, class) -> readers only
         for o in self.objects:
-            if o.type.name != "MonoBehaviour":
-                continue
-            script, fields, ok = self.mb_values(o)
-            read += 1
-            complete += bool(ok)
-            head = _read(o)
-            go = _reader_of(getattr(head, "m_GameObject", None)) if head is not None else None
-            row = {"id": oid(o),
-                   "gameObject": {"ref": oid(go), "name": self.name_of(go)} if go is not None else None,
-                   "enabled": bool(getattr(head, "m_Enabled", True)) if head is not None else None,
-                   "values_complete": ok, "fields": fields}
-            cls = ".".join(p for p in (script["namespace"], script["class"]) if p) or "?"
-            by_class[(script["assembly"] or "?", cls)].append(row)
-            for path, r in _walk_refs(fields):
-                refs.append((oid(o), cls, row["gameObject"]["name"] if row["gameObject"] else "",
-                             path, r.get("ref") or "", r.get("type") or "", r.get("name") or ""))
-        index = []
-        for (asm, cls), rows in sorted(by_class.items()):
-            sub = self.dir("scripts", safe_name(asm))
-            path = os.path.join(sub, safe_name(cls) + ".jsonl")
-            with open(path, "w") as f:
-                for row in rows:
-                    f.write(json.dumps(_finite(row), ensure_ascii=False, default=str, allow_nan=False) + "\n")
-            index.append({"assembly": asm, "class": cls, "count": len(rows),
-                          "values_complete": sum(1 for r in rows if r["values_complete"]),
-                          "file": os.path.relpath(path, self.out)})
+            if o.type.name == "MonoBehaviour":
+                asm, ns, cn = self.script_of(o)
+                cls = ".".join(p for p in (ns, cn) if p) or "?"
+                by_class[(asm or "?", cls)].append(o)
+        index, read, complete = [], 0, 0
+        with open(os.path.join(d, "references.tsv"), "w") as refs:
+            refs.write("from_id\tfrom_class\tgameobject\tfield\tto_id\tto_type\tto_name\n")
+            for (asm, cls), readers in sorted(by_class.items()):
+                sub = self.dir("scripts", safe_name(asm))
+                path = os.path.join(sub, safe_name(cls) + ".jsonl")
+                done = 0
+                with open(path, "w") as f:
+                    for o in readers:
+                        _, fields, ok = self.mb_values(o, cache=False)
+                        head = _read(o)
+                        go = _reader_of(getattr(head, "m_GameObject", None)) if head is not None else None
+                        goname = self.name_of(go) if go is not None else ""
+                        row = {"id": oid(o),
+                               "gameObject": {"ref": oid(go), "name": goname} if go is not None else None,
+                               "enabled": bool(getattr(head, "m_Enabled", True)) if head is not None else None,
+                               "values_complete": ok, "fields": fields}
+                        f.write(json.dumps(_finite(row), ensure_ascii=False, default=str, allow_nan=False) + "\n")
+                        for fpath, r in _walk_refs(fields):
+                            refs.write("\t".join(str(c).replace("\t", " ").replace("\n", " ") for c in (
+                                oid(o), cls, goname or "", fpath, r.get("ref") or "", r.get("type") or "",
+                                r.get("name") or "")) + "\n")
+                        done += bool(ok)
+                read += len(readers)
+                complete += done
+                index.append({"assembly": asm, "class": cls, "count": len(readers),
+                              "values_complete": done, "file": os.path.relpath(path, self.out)})
         self.write_json("scripts/index.json", index)
-        with open(os.path.join(d, "references.tsv"), "w") as f:
-            f.write("from_id\tfrom_class\tgameobject\tfield\tto_id\tto_type\tto_name\n")
-            for row in refs:
-                f.write("\t".join(str(c).replace("\t", " ").replace("\n", " ") for c in row) + "\n")
         self.write_fields_table(by_class)
         self.counts["monobehaviours"] = read
         self.mb_stats = {"total": read, "values_complete": complete, "classes": len(by_class)}
         if read and complete < read:
             self.notes.append(f"{read - complete}/{read} MonoBehaviours have header-only values "
-                              "(no generated type tree for their class) — scripts/index.json lists which.")
+                              "(no type tree for their class) — scripts/index.json lists which.")
         return self.mb_stats
 
     def write_fields_table(self, by_class):
@@ -1179,6 +1237,9 @@ class Extractor:
             except Exception:
                 self.errors["Mesh:export"] += 1
                 continue
+            if not isinstance(body, str):       # UnityPy 1.25 returns False for an unexportable mesh
+                self.errors["Mesh:export"] += 1
+                continue
             path = self.alloc.path(d, m.m_Name, ".obj", f"mesh_{o.path_id}")
             with open(path, "w") as f:
                 f.write(body)
@@ -1288,8 +1349,14 @@ class Extractor:
                 path = self.alloc.path(text_dir, name,
                                        "" if "." in name else ".txt")
                 self.counts["text"] += 1
+                self.text_index.append(_text_profile(name, os.path.basename(path), raw))
             with open(path, "wb") as f:
                 f.write(raw)
+        self.write_json("text/index.json", self.text_index)
+        likely = [t["file"] for t in self.text_index if t.get("level_like")]
+        if likely:
+            self.notes.append(f"{len(likely)} TextAsset(s) look like level/map data by content but not by "
+                              f"name ({', '.join(likely[:5])}) — see text/index.json.")
         return levels
 
     # -- deep capture ------------------------------------------------------

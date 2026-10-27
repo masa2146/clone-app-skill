@@ -414,6 +414,7 @@ public static class ImportUI
         var outPath = ImportExtracted.Arg("-cloneOut", "ui.png");
         var screen = ParseScreen(ImportExtracted.Arg("-cloneScreen", "1080x2400"));
         bool transparent = Array.IndexOf(Environment.GetCommandLineArgs(), "-cloneTransparent") >= 0;
+        UnityEngine.Rendering.GraphicsSettings.useScriptableRenderPipelineBatching = false;
         var scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
         var go = (GameObject)PrefabUtility.InstantiatePrefab(AssetDatabase.LoadAssetAtPath<GameObject>(prefabPath), scene);
         var size = ((RectTransform)go.transform).sizeDelta;
