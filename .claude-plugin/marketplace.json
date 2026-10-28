@@ -34,7 +34,7 @@
       "name": "clone-app",
       "source": "./plugins/clone-app",
       "description": "Take a Google Play app apart completely — content, API surface, mechanics, architecture, build spec — then judge cloning it",
-      "version": "0.3.1",
+      "version": "0.3.2",
       "author": {
         "name": "masa2146"
       },
