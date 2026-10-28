@@ -38,6 +38,7 @@ def main():
     check("build plan rows added, done ones skipped", "| P-screen-menu |" in md and "P-old" not in md)
     ids = [l.split("\t")[0] for l in open(os.path.join(S, "..", "templates", "lifecycle.tsv")).read().splitlines()[1:] if l]
     check("lifecycle ids are unique", len(ids) == len(set(ids)))
+    check("T004 (the scaffold itself) starts done", "| T004 | `/clone-build kur` | bitti |" in md)
     check("pipe in a title cannot break the table", "Menu / main" in md)
     claude = open(os.path.join(proj, "CLAUDE.md")).read()
     check("CLAUDE.md starts sessions with /task sonraki", "/task sonraki" in claude and "@Docs/KAYNAK.md" in claude)
