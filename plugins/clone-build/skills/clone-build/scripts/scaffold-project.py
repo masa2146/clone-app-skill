@@ -65,6 +65,15 @@ TestResults*.xml
 __pycache__/
 """
 
+# a clone's imported reference art is rebuilt from the extraction by ImportExtracted /
+# ImportUI; committed once, it stays in the history and the repo can never be pushed
+CLONE_IGNORE = """# extracted reference, rebuilt by CloneKit — never in git
+/Assets/Extracted/
+/Assets/Extracted.meta
+/Assets/ExtractedUI/
+/Assets/ExtractedUI.meta
+"""
+
 UNITY_DEFAULT = "/Applications/Unity/Hub/Editor/*/Unity.app/Contents/MacOS/Unity"
 
 
@@ -144,10 +153,19 @@ def install_clone_kit(project, done):
         print("WARN: clone-app plugin not found — Unity kit not copied", file=sys.stderr)
         return
     t = os.path.join(ca, "templates")
-    for name in ("ImportExtracted.cs", "ImportUI.cs", "VerifyImport.cs", "RenderLayout.cs"):
-        copy_new(os.path.join(t, name), os.path.join(project, "Assets", "Editor", "CloneKit", name), done)
+    have = {os.path.basename(p) for p in glob.glob(os.path.join(project, "Assets", "**", "*.cs"), recursive=True)}
     # runtime component: must sit outside an Editor folder or prefabs lose it
-    copy_new(os.path.join(t, "ExtractedNode.cs"), os.path.join(project, "Assets", "CloneKit", "ExtractedNode.cs"), done)
+    kit = [(n, ("Editor", "CloneKit")) for n in ("ImportExtracted.cs", "ImportUI.cs", "VerifyImport.cs", "RenderLayout.cs")]
+    for name, sub in kit + [("ExtractedNode.cs", ("CloneKit",))]:
+        if name in have:  # a second copy anywhere under Assets is a duplicate class: CS0101
+            mine = glob.glob(os.path.join(project, "Assets", "**", name), recursive=True)[0]
+            with open(mine, "rb") as f, open(os.path.join(t, name), "rb") as g:
+                same = f.read() == g.read()
+            print(f"WARN: {name} already in Assets — kept the project's copy"
+                  + ("" if same else f"; it differs from clone-app's current kit, replace it with {os.path.join(t, name)} to get its fixes"),
+                  file=sys.stderr)
+            continue
+        copy_new(os.path.join(t, name), os.path.join(project, "Assets", *sub, name), done)
     copy_new(os.path.join(ca, "unity-batch.sh"), os.path.join(project, "tools", "unity-batch.sh"), done)
 
 
@@ -232,6 +250,8 @@ def main(argv=None):
                        "  ada göre birleştirme yapılmaz, aynı adlı iki nesne olabilir.\n"
                        "- Unity kiti `Assets/Editor/CloneKit/`: ImportExtracted (3D), ImportUI (ekranlar), VerifyImport\n"
                        "  (Python beklentisiyle karşılaştırma). Unity'yi `tools/unity-batch.sh` ile çalıştır.\n"
+                       "- `Assets/Extracted/` ve `Assets/ExtractedUI/` kitle çıkarımdan yeniden kurulur, git'e girmez\n"
+                       "  (`.gitignore`'da). Bir kez commit'lenen çıkarılmış dosya geçmişte kalır, depo bir daha gönderilemez.\n"
                        "- Bilinen tuzaklar: clone-app SKILL.md \"Known traps\".\n"
                        "- Çıkarılmış dosya mağaza paketine ve GitHub'a girmez; yayından önce paket taraması 0 göstermeli.\n"
                        + ("\n@Docs/KAYNAK.md\n" if kaynak else ""))
@@ -258,7 +278,8 @@ def main(argv=None):
             done.append(os.path.join(project, rel))
     gi = os.path.join(project, ".gitignore")
     have = open(gi).read().splitlines() if os.path.exists(gi) else []
-    missing = [l for l in GITIGNORE.splitlines() if l and l not in have]
+    wanted = GITIGNORE + (CLONE_IGNORE if a.source == "clone" else "")
+    missing = [l for l in wanted.splitlines() if l and l not in have]
     if missing:
         with open(gi, "a") as f:
             f.write(("\n" if have else "") + "\n".join(missing) + "\n")
