@@ -47,9 +47,19 @@ def main():
     check("Unity kit copied, runtime part outside Editor",
           os.path.exists(os.path.join(proj, "Assets", "Editor", "CloneKit", "ImportExtracted.cs"))
           and os.path.exists(os.path.join(proj, "Assets", "CloneKit", "ExtractedNode.cs")))
-    check(".gitignore keeps captures and logs out", "captures/" in open(os.path.join(proj, ".gitignore")).read())
+    gi = open(os.path.join(proj, ".gitignore")).read()
+    check(".gitignore keeps captures, logs and extracted art out", "captures/" in gi and "/Assets/Extracted/" in gi)
     tdir = json.load(open(os.path.join(proj, "Docs", "project.json")))["teslim_dir"]
     check("delivery folder outside the repo", tdir.startswith(teslim_root) and os.path.exists(os.path.join(tdir, "TESLIMLER.md")))
+
+    old = os.path.join(tmp, "Eski")
+    os.makedirs(os.path.join(old, "Assets", "Editor"))
+    open(os.path.join(old, "Assets", "Editor", "ImportExtracted.cs"), "w").write("// project's own copy\n")
+    code, out = run("scaffold-project.py", old, "--game", "Eski", "--package", "com.a.c", "--teslim-root", teslim_root, "--no-git")
+    check("kit already in the project is not copied twice",
+          not os.path.exists(os.path.join(old, "Assets", "Editor", "CloneKit", "ImportExtracted.cs"))
+          and os.path.exists(os.path.join(old, "Assets", "Editor", "CloneKit", "ImportUI.cs")))
+    check("an outdated project copy is reported", "differs from clone-app's current kit" in out)
 
     open(os.path.join(proj, "CLAUDE.md"), "a").write("own line\n")
     run("scaffold-project.py", proj, "--game", "Deneme Oyun", "--package", "com.a.b", "--no-git")
