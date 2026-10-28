@@ -1,0 +1,46 @@
+id	faz	kaynak	is	bitti_sayilir	kapi
+T001	F0 Kararlar	*	Yayın niyeti, kaynak türü, platform, ad	DECISIONS #1–4: yayınlanacak mı, klon mu özgün mü, platformlar (Android / iOS); paket adı (applicationId, Play'de sonradan değişmez); oyun adı ve marka araması; Play takvimi (hedef API tarihi, hesap doğrulaması, kişisel hesapta 12 testçi × 14 gün kapalı test). Çıkarılmış içerik git'e girmez; bu kural karardan bağımsızdır	G0
+T002	F0 Kararlar	*	Kitle, para modeli, hesaplar	Yaş sınıfı; IAP ve reklam modeli; hangi geliştirici hesabı (hesap bilgisi depoya yazılmaz, yalnız hafızaya)	G0
+T003	F0 Kararlar	*	Lisans tablosu, konuşma saklama, izinler, kredi izi	`docs/LICENSES.tsv` iskeleti açık (her dış varlık için bir satır: kaynak, lisans, kanıt); `cleanupPeriodDays: 365`; proje dışı yazılacak klasörler izin listesinde; ücretli servislerin (Tripo, Gemini, test servisi) kredi kaydı `raw-ai/krediler.tsv`'de	G0
+T004	F1 Kurulum	*	`/clone-build kur`	Klasör düzeni, .gitignore, Docs/TASKS.md, Docs/tasks/, Docs/KARARLAR.md, CLAUDE.md, teslim kökü ve TESLIMLER.md hazır; klon projesinde clone-app Unity araçları Assets/Editor/CloneKit altında; ilk commit	G0
+T014	F1 Kurulum	*	Yedek, anahtarlar, test kaydı, tarayıcı profili	`GameWork/<oyun>/` ve depo günlük yedekte; imza anahtarı ve parolası parola yöneticisinde ve çevrimdışı yedekte (yeri hafızada, depoda değil); testler ve çekimler geçici kayıt klasörü kullanıyor; tarayıcı profilleri `GameWork/<oyun>/browser/` altında	G0
+T005	F1 Kurulum	*	Çekim düzeneği öz testleri	Çözünürlük referansla aynı, perde ve kilitli düğme yok, sabit saat, tohumlu rastgelelik, adaptif kalite kapalı, hazır sinyali, eski sonuç dosyası siliniyor, uyku engelleniyor: 8 öz test yeşil	G0
+T006	F1 Kurulum	*	Telefonda boş sahne	APK kuruluyor, dokunmadan açılıyor (probe), logcat temiz, telefon kilidi çalışıyor; açılış videosu teslimde	G0
+T007	F2 Kaynak	K	clone-app çıkarımı	`check-extraction.py` 13 kuralın hepsi yeşil (FAIL varsa hangi kısmın güvenilmez olduğu TASKS "Şu an"da yazılı); `ImportExtracted` + `VerifyImport` ile bütün nesneler düğüm düğüm doğrulandı; bilerek eklenen hata yakalandı	G1
+T008	F2 Kaynak	K	Referans kütüphanesi	Oynanış videoları `fetch-reference-video.sh` ile en yüksek çözünürlükte (720p altı uyarısı yok); menü/sonuç/öğretici ekranları videodan kesildi; seviye → video + saniye tablosu	G1
+T009	F2 Kaynak	K	Oyun kodu dökümü	Il2CppDumper `dump.cs`, `script-fields.tsv`, ayar değerleri; çalışma anında fizik/zaman ayarını değiştiren metotlar listelendi	G1
+T010	F2 Kaynak	K	Kaynak oyunun kuralları ve seviye şeması	`docs/source/`: mekanik listesi `[S]/[D]/[I]` işaretli, `LEVEL-DATA.md` alan sayımı, seviye parmak izi tablosu	G1
+T015	F2 Kaynak	Ö	Oyun fikri ve tasarım belgesi	hitforge: pazar taraması → kavram onayı → `/spec` ile `docs/specs/<id>/spec.md`; çekirdek döngü, kaybetme durumu, zorluk eğrisi ve meta yazılı; reklamda okunabilirlik denendi	G1
+T011	F3 Yön	*	Sadakat, sanat hedefi, araç zinciri	DECISIONS: mekanik sadakat (birebir), görsel sadakat (yerleşim/boy/okunurluk); 3–5 oyundan ölçülmüş kalite kareleri; her sıfat bir sayıya ya da kareye bağlı; varlık sınıfı → araç tablosu; gölgelendirici kararı ve lisans satırı	G2
+T012	F4 Dikey dilim	*	Bir mekanik, bir seviye, bir ekran	Telefonda oynanıyor; orijinalle aynı telefonda yan yana video; fizik ya da zamanlama cihaz ayarıyla ölçüldü	G9, G12
+T013	F5 Görünüm kilidi	*	Hedef kareler ve stil sözleşmesi	Oyun karesinin üstüne 2–3 hedef; palet, parlaklık aralığı, kontur, gölge tonu, malzeme, ışık sayılarla; renk körlüğü benzetiminde karışan renk çifti sayısı ölçüldü; kullanıcı onayı DECISIONS'ta; görsel kural testleri (tek kontur, gölge tonu, metin görselde değil) yeşil	G3
+T020	F6 Mekanikler	*	Simülasyon sürücüsü	Oyunun kendi adımını çağırıyor (FixedUpdate dahil), cihaz ayarıyla koşuyor; sonuçları bir kez cihazda doğrulandı	G6
+T021	F6 Mekanikler	*	Test oyuncusu ve kalibrasyon	Kabul testi beş maddesiyle yeşil; kalibrasyon seti (cihaz sonuçları ya da orijinalin bilinen zorluğu); `calib/<sürüm>.json`	G6
+T022	F6 Mekanikler	*	Tarama servisi	Bütün seviyeler, paralel kopyalar; gerçek süre ölçüldü ve skill'e yazıldı	G7
+T030	F8 Ekranlar ve meta	*	Ortak UI parçaları	Düğme, pencere, kart, sayaç parçaları ve anlık görüntü testleri; DOKUNULMAZ listesi CLAUDE.md'de	G10
+T035	F8 Ekranlar ve meta	*	İlk oturum deneyimi	Öğretici akışı ve mekanik tanıtım kartları (her yeni engel kendi seviyesinde tanıtılır); ilk 10 dakikanın akış videosu	G9
+T040	F8 Ekranlar ve meta	*	İlerleme, ekonomi, güçler, etkinlikler	Kurallar `[S]/[D]/[I]`; tarama yeşil	G5, G7
+T041	F8 Ekranlar ve meta	*	Yerelleştirme	Metin dinamik, görsele gömülü değil; Türkçe glifler tam; iki dilde ekran çekimi	G9
+T050	F9 Sanat ve ses	*	Yayın denetimi sayacı	Build'deki orijinal dosya sayısı komutla ölçülüyor ve TASKS "Şu an"da	G13
+T060	F9 Sanat ve ses	*	Ses	Kaynaklar lisanslı; ses olayı haritası referansla aynı; "her olay ses çalıyor" testi (sessiz kalan olay yok)	G9, G10
+T061	F9 Sanat ve ses	*	Yazı tipi	OFL; Türkçe glifler; bütün ekranlarda çekim	G9
+T070	F10 Seviyeler	*	Kaynak seviyelerin analizi	Zorluk eğrisi, aile dağılımı, tekrarlar, hatalı orijinaller ölçüldü; tasarım kuralları yazıldı	G1
+T071	F10 Seviyeler	*	Üreteç ve L0/L1/L2 kapıları	Tek komutla, kaldığı yerden devam eden hat; tuzaklar skill'in kural tablosunda	G7
+T072	F10 Seviyeler	*	Hakem	Karar JSON'u, kör alt ajan, göz katmanı, en çok 3 tur; istem şablonları depoda	G6, G8
+T080	F11 Dayanıklılık	*	Kayıt/devam ve arka plan	Kayıttan devam taraması bütün seviyelerde birebir; arka plana alma, bozuk kayıt, çevrimdışı ve cihaz saatini oynatma (zamanlı ödül hilesi) testleri; kayıt sürümlü, eski sürümün kaydı yeni sürümde açılıyor	G7
+T090	F12 Para, veri, sunucu	*	Sunucu	Kimlik, kayıt, liderlik, satın alma doğrulama, hesap silme, iade işi, yedek; testler; yayından önce `/cso`	—
+T091	F12 Para, veri, sunucu	*	Uygulama içi satın alma	Ürünler tanımlı (BILLING izinli AAB yüklenmeden ürün açılamaz); test satın alması telefonda	G12
+T092	F12 Para, veri, sunucu	*	Reklam ve rıza	UMP rıza akışı, app-ads.txt, test reklamları telefonda	G12
+T093	F12 Para, veri, sunucu	*	Analitik ve çökme raporu	Eklemeden önce güvenlik taraması; olaylar tanımlı	—
+T094	F12 Para, veri, sunucu	*	Uzaktan bölüm paketi	sha256 sürüm, bir sonraki açılışta geçiş, yerleşik yedek, derin doğrulama	G7
+T095	F12 Para, veri, sunucu	*	Web sayfaları	Geliştirici sitesi; gizlilik, kullanım koşulları ve hesap silme sayfaları; `/qa` raporu temiz; başka uygulamanın bağlantısı kırılmıyor	—
+T100	F13 Cihaz QA	*	`device-qa`	1–N. seviye telefonda otomatik; 20:9 ve tablet kararı; fps, bellek, ilk açılış süresi; logcat temiz; ses	G12
+T101	F13 Cihaz QA	*	Paket boyutu bütçesi	AAB taban modülü ve indirme boyutu ölçüldü, Play sınırının altında; büyük içerik (seviyeler, videolar) uzaktan pakete ya da asset pack'e alındı	G12
+T110	F14 Bağımsızlık	*	Paket taraması ve lisanslar	APK/AAB'de orijinalden 0 dosya; `LICENSES.tsv` tam; THIRD-PARTY-NOTICES; GitHub'a yalnız temiz anlık görüntü	G13
+T111	F14 Bağımsızlık	K	Ayrışma ve telif panosu	Ad, ikon, karakterler, seviyeler, kart ve mağaza metinleri orijinalle yan yana; her satırda "neden ayrışıyor" notu; kullanıcı onayı	G13
+T120	F15 Mağaza ve yayın	*	İmza ve derleme	Anahtar depo dışında; sürüm kodu her derlemede artıyor; boş parola kontrolü; derlemeden önce sahne yeniden üretiliyor	G13
+T121	F15 Mağaza ve yayın	*	Play Console formları	IARC, veri güvenliği, uygulama içeriği, hedef kitle	G13
+T122	F15 Mağaza ve yayın	*	Mağaza girişi	Ajan yürütür (yazılar, görseller, video, YouTube yüklemesi, Play Console formları); kullanıcıya yalnız giriş/2FA, yasal beyan, vergi/ödeme, fiyat onayı, üretime yayın ve silme kalır; en az üç 9:16 ekran görüntüsü, kural denetimi geçti	G9
+T123	F15 Mağaza ve yayın	*	İç test ve kapalı test	İç testte telefondan Play ile kurulum; kapalı test (kişisel hesapta 12 testçi × 14 gün); takvimli güncellemeler	G12
+T124	F15 Mağaza ve yayın	*	Üretim başvurusu	Başvuru formu doğru cevaplarla (göndermeden önce kullanıcı onayı); yayın	G13
+T130	F16 Yayın sonrası	*	Canlı işletme	Bölüm partileri uzaktan pakette; sürüm notları; mağaza denemeleri; temel ölçümler (tutma, çökme)	—

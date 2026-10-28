@@ -2,7 +2,7 @@
 allowed-tools: Bash, Read, Glob, Grep, Write, Edit, Skill, Agent
 description: Build a verified, prod-ready clone from a clone-build-spec.md (app or game)
 user-invocable: true
-argument-hint: <path to clone-build-spec.md or ./work/<pkg>>
+argument-hint: kur | <path to clone-build-spec.md or ./work/<pkg>>
 argument: path to the build spec or work dir (optional)
 ---
 
@@ -14,6 +14,12 @@ Drive the clone-build skill: spec → scaffold → gated task graph → verified
 
 Follow the clone-build skill workflow in
 `${CLAUDE_PLUGIN_ROOT}/skills/clone-build/SKILL.md` exactly, phases P0 through P5.
+
+### `kur` — day-one project layout
+If the argument is `kur`, run only the "Day one" step of SKILL.md
+(`scaffold-project.py`): ask for the game name, package and source (clone or
+original) if not given, then report the project path, task count and delivery
+folder, and stop. The next session starts with `/task sonraki`.
 
 ### Step 1: Locate the spec
 If the user passed a path, use it. Otherwise look for

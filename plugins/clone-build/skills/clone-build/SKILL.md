@@ -73,6 +73,28 @@ Then load **only** the matching branch guide: `references/app-build-guide.md` fo
 `app`, `references/game-build-guide.md` for `game`. (These are added in later plans;
 if absent, note the gap and continue with the spine.)
 
+## Day one: `/clone-build kur`
+
+For a game meant to ship, lay the project out before P1 — the task list, the session
+rules and the delivery folder exist from the first commit, not after the mess:
+
+```bash
+python3 ${CLAUDE_PLUGIN_ROOT}/skills/clone-build/scripts/scaffold-project.py "$REPO" \
+  --game "<Name>" --package com.x.y --source clone|original --work "$WORK" [--unity]
+```
+
+It writes `CLAUDE.md` (sessions start with `/task sonraki`, delivery with full paths,
+branch per task, store rule), `Docs/TASKS.md` (the lifecycle in
+`templates/lifecycle.tsv` filtered by source, plus `build-plan.json`'s open tasks as
+`P-*` rows), `Docs/KARARLAR.md`, `Docs/project.json`, a Unity `.gitignore`, and
+`<teslim-root>/<game>/teslim/` outside the repo. A clone also gets clone-app's Unity
+kit and the bootstrap (step P1b) — the bootstrap `CLAUDE.md` lands as
+`Docs/KAYNAK.md` and is imported, never overwriting the project's own. `--unity`
+runs `-createProject` and adds `com.unity.ugui`. Existing files are never touched.
+From then on every session is `/task sonraki` → work → gate → `teslim.py` →
+"birleştireyim mi?" (`commands/task.md`). Task details are written when the task
+starts, not up front.
+
 ## P1: Project scaffold
 Per the loaded branch guide, scaffold an empty **buildable** project into
 `$REPO`. If `$REPO` already holds a project (a resumed build, or a repo the user

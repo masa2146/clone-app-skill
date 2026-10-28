@@ -1,0 +1,42 @@
+# {game}
+
+{source_line} Paket: `{package}`. İş listesi `Docs/TASKS.md`, kararlar `Docs/KARARLAR.md`,
+proje bilgisi `Docs/project.json`.
+
+## Oturum düzeni
+
+- **Her oturum `/task sonraki` ile başlar.** Sıradaki işi seçer, `Docs/tasks/<ID>-<ad>.md`
+  ayrıntı dosyasını açar ve işe ayrı bir dal açar. Süren iş varsa onu gösterir.
+- Ayrıntı dosyası iş başlarken yazılır, önceden değil. Plan bölümü superpowers
+  writing-plans biçimindedir; eklenti kurulu değilse adımlar elle izlenir.
+- Bir oturumda tek iş. Yolda çıkan yeni iş `tasks.py add` ile listeye girer, araya alınmaz.
+- İşin gerektirdiği izinler (Unity, cihaz, tarayıcı, sunucu) başta bir kez toplu sorulur.
+- İş biterken: kapı kontrolleri → `teslim.py` → kullanıcıya "birleştireyim mi?" →
+  evet ise `git merge --no-ff` ve `tasks.py set <ID> bitti`.
+
+## Teslim
+
+- Her teslim `teslim.py` ile `{teslim_dir}/<tarih>/<saat>_<ID>_<ad>/` altına kopyalanır ve
+  kullanıcıya tam yollarıyla, kod bloğunda, her dosya ayrı satırda verilir.
+- Çekimler, videolar ve loglar depoya girmez (`captures/`, `compare/`, `*.log` yok sayılır).
+{compare_line}
+
+## Kontroller
+
+- "Geçti" yalnız komutun çıktısıyla yazılır. Ölçülemeyen metrik uydurulmaz, "ölçülemedi" yazılır.
+- Web ve UI akışı → `/qa`; seviye → hakem; Unity kodu → EditMode/PlayMode testleri; her
+  düzeltilen hata küçük bir test bırakır.
+
+## İletişim
+
+- Önce sonuç, sonra gerekçe; tam ve düz cümle. Yeni bir adı ilk geçtiği yerde tanıt ve
+  oyundan bir sahneyle örnekle.
+- Karar sorarken en fazla 3 seçenek ver, önerini başa koy, ne görüleceğini söyle.
+
+## Mağaza
+
+- Mağaza işlerini ajan yürütür: metinler, görseller, videolar, Play Console formları,
+  yüklemeler (tarayıcıyla). Kullanıcı yalnız şunları yapar: giriş ve iki adımlı doğrulama,
+  yasal beyan kutuları, vergi ve ödeme, fiyat onayı, üretime çıkış, silmeler.
+- Hesap bilgisi (e-posta, kimlik) depoya yazılmaz.
+{clone_block}

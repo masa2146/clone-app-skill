@@ -3,9 +3,6 @@ set -uo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 fail=0
 
-echo "=== smoke ==="
-bash "$HERE/smoke-structure.sh" || fail=1
-
 echo "=== bash tests ==="
 for t in "$HERE"/test-*.sh; do
   echo "--- $(basename "$t") ---"

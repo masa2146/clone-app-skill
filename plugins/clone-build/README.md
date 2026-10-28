@@ -26,6 +26,10 @@ exits 0 — the model never self-certifies. Execution uses
 - `preflight.sh` — probe Unity / flutter / gradle / node / adb → JSON.
 - `gen-build-plan.py` — spec + artifacts → `build-plan.json` (deterministic).
 - `run-gate.sh` — single gate-execution chokepoint.
+- `scaffold-project.py` — `/clone-build kur`: day-one layout (CLAUDE.md, `Docs/TASKS.md`
+  from `templates/lifecycle.tsv`, `.gitignore`, delivery folder, clone-app's Unity kit).
+- `tasks.py` — `/task`: next task, its detail file and branch; status, add, list.
+- `teslim.py` — copy a task's evidence to `<teslim-root>/<game>/teslim/<date>/` and print full paths.
 
 ## Tests
 ```bash
