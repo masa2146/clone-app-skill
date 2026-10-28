@@ -20,6 +20,7 @@ import os
 import shutil
 import subprocess
 import sys
+import tempfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 TEMPLATES = os.path.join(HERE, "..", "templates")
@@ -107,7 +108,9 @@ def tasks_md(game, source, work):
         if r["faz"] != faz:
             faz = r["faz"]
             out += ["", f"## {faz}", "", tasks.HEADER, tasks.SEP]
-        out.append(f"| {r['id']} | {cell(r['is'])} | bekliyor | {cell(r['kapi'])} | {cell(r['bitti_sayilir'])} |  |")
+        # T004 is this scaffold itself: done the moment the list exists
+        status = "bitti" if r["id"] == "T004" else "bekliyor"
+        out.append(f"| {r['id']} | {cell(r['is'])} | {status} | {cell(r['kapi'])} | {cell(r['bitti_sayilir'])} |  |")
     plan = plan_rows(work) if work else []
     if plan:
         out += ["", "## P Yapım planı (build-plan.json)", "", tasks.HEADER, tasks.SEP]
@@ -158,16 +161,30 @@ def install_bootstrap(project, work, done):
     copy_new(os.path.join(root, "deliverables", "reconstruction"), os.path.join(project, "Docs", "reconstruction"), done)
 
 
+def unity_binary(unity):
+    if unity != "auto":
+        return unity
+    found = sorted(glob.glob(UNITY_DEFAULT))
+    if not found:
+        sys.exit("ERROR: no Unity editor found; pass --unity <binary>")
+    return found[-1]
+
+
+def compile_check(project, unity):
+    """Open the project once: the kit compiles and its .meta files exist before the first commit."""
+    log = os.path.join(tempfile.gettempdir(), f"compile-check-{os.getpid()}.log")
+    subprocess.run([unity, "-batchmode", "-quit", "-projectPath", project, "-logFile", log])
+    with open(log, errors="replace") as f:
+        errors = sorted({l.strip() for l in f if "error CS" in l})
+    if errors:
+        sys.exit("ERROR: the project does not compile:\n" + "\n".join(errors[:10]) + f"\nlog: {log}")
+
+
 def create_unity(project, unity):
     if os.path.isdir(os.path.join(project, "Assets")) and os.path.exists(os.path.join(project, "ProjectSettings")):
         return
-    if unity == "auto":
-        found = sorted(glob.glob(UNITY_DEFAULT))
-        if not found:
-            sys.exit("ERROR: no Unity editor found; pass --unity <binary>")
-        unity = found[-1]
-    log = os.path.join(project, "Logs", "create-project.log")
-    os.makedirs(os.path.dirname(log), exist_ok=True)
+    # the log stays out of the project folder: -createProject wants it empty
+    log = os.path.join(tempfile.gettempdir(), f"create-project-{os.getpid()}.log")
     r = subprocess.run([unity, "-batchmode", "-quit", "-createProject", project, "-logFile", log])
     if r.returncode != 0:
         sys.exit(f"ERROR: Unity -createProject failed, see {log}")
@@ -194,8 +211,9 @@ def main(argv=None):
 
     project = os.path.abspath(os.path.expanduser(a.project))
     os.makedirs(project, exist_ok=True)
-    if a.unity:
-        create_unity(project, a.unity)
+    unity = unity_binary(a.unity) if a.unity else None
+    if unity:
+        create_unity(project, unity)
     gslug = tasks.slug(a.game, 60)
     teslim_dir = os.path.join(os.path.abspath(os.path.expanduser(a.teslim_root)), gslug, "teslim")
     work = os.path.abspath(os.path.expanduser(a.work)) if a.work else None
@@ -249,6 +267,8 @@ def main(argv=None):
         done.append(os.path.join(teslim_dir, "TESLIMLER.md"))
     lines, ts = tasks.load(project)
     tasks.save(project, lines, ts)
+    if unity:
+        compile_check(project, unity)
 
     if not a.no_git and not os.path.isdir(os.path.join(project, ".git")):
         subprocess.run(["git", "init", "-q", "-b", "main", project], check=True)
