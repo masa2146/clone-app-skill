@@ -1,0 +1,13 @@
+{
+  "name": "magaza",
+  "version": "0.1.0",
+  "description": "Google Play store listing for a game that will ship: competitor research, texts in many languages, screenshots and feature graphics in three styles, a trailer, Play-policy checks, a review page and A/B variants.",
+  "author": {
+    "name": "masa2146"
+  },
+  "repository": "https://github.com/masa2146/clone-app-skill",
+  "license": "Apache-2.0",
+  "keywords": ["google-play", "store-listing", "aso", "screenshots", "trailer", "localization"],
+  "skills": "./skills/",
+  "commands": "./commands/"
+}

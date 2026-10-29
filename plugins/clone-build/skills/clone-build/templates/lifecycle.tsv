@@ -40,7 +40,7 @@ T110	F14 Bağımsızlık	*	Paket taraması ve lisanslar	APK/AAB'de orijinalden 0
 T111	F14 Bağımsızlık	K	Ayrışma ve telif panosu	Ad, ikon, karakterler, seviyeler, kart ve mağaza metinleri orijinalle yan yana; her satırda "neden ayrışıyor" notu; kullanıcı onayı	G13
 T120	F15 Mağaza ve yayın	*	İmza ve derleme	Anahtar depo dışında; sürüm kodu her derlemede artıyor; boş parola kontrolü; derlemeden önce sahne yeniden üretiliyor	G13
 T121	F15 Mağaza ve yayın	*	Play Console formları	IARC, veri güvenliği, uygulama içeriği, hedef kitle	G13
-T122	F15 Mağaza ve yayın	*	Mağaza girişi	Ajan yürütür (yazılar, görseller, video, YouTube yüklemesi, Play Console formları); kullanıcıya yalnız giriş/2FA, yasal beyan, vergi/ödeme, fiyat onayı, üretime yayın ve silme kalır; en az üç 9:16 ekran görüntüsü, kural denetimi geçti	G9
+T122	F15 Mağaza ve yayın	*	Mağaza girişi	`/magaza` ile: 12 dilde rakip taraması ve kendi cümlelerimizle metin; her dilde üç stilde (şerit, panorama, odak) 8 ekran görüntüsü + özellik grafiği; isteğe bağlı fragman (YouTube'a liste dışı); `denetle.py` 0 HATA; kullanıcı karşılaştırma sayfasında stil seçti; seçilen stil yüklendi, öbür ikisi yayından sonra A/B denemesinde. Ajan yürütür; kullanıcıya yalnız giriş/2FA, yasal beyan, vergi/ödeme, fiyat onayı, üretime yayın ve silme kalır	G9
 T123	F15 Mağaza ve yayın	*	İç test ve kapalı test	İç testte telefondan Play ile kurulum; kapalı test (kişisel hesapta 12 testçi × 14 gün); takvimli güncellemeler	G12
 T124	F15 Mağaza ve yayın	*	Üretim başvurusu	Başvuru formu doğru cevaplarla (göndermeden önce kullanıcı onayı); yayın	G13
 T130	F16 Yayın sonrası	*	Canlı işletme	Bölüm partileri uzaktan pakette; sürüm notları; mağaza denemeleri; temel ölçümler (tutma, çökme)	—

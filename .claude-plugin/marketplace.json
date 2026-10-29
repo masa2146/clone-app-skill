@@ -7,7 +7,7 @@
   },
   "metadata": {
     "description": "Claude Code plugins: Android reverse engineering plus clone-feasibility analysis",
-    "version": "1.6.1"
+    "version": "1.7.0"
   },
   "plugins": [
     {
@@ -71,7 +71,7 @@
       "name": "clone-build",
       "source": "./plugins/clone-build",
       "description": "Build a verified, production-ready clone from clone-app's build spec and reconstruction package (app or game)",
-      "version": "0.4.2",
+      "version": "0.4.3",
       "author": {
         "name": "masa2146"
       },
@@ -85,6 +85,24 @@
         "verification"
       ],
       "category": "security"
+    },
+    {
+      "name": "magaza",
+      "source": "./plugins/magaza",
+      "description": "Google Play store listing for a game that will ship: competitor research, texts in many languages, screenshots and feature graphics in three styles, a trailer, Play-policy checks, a review page and A/B variants.",
+      "version": "0.1.0",
+      "author": {
+        "name": "masa2146"
+      },
+      "license": "Apache-2.0",
+      "keywords": [
+        "google-play",
+        "store-listing",
+        "aso",
+        "screenshots",
+        "trailer",
+        "localization"
+      ]
     }
   ]
 }
