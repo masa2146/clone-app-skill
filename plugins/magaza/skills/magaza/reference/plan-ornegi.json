@@ -1,0 +1,32 @@
+{
+  "oyun": "Game Name",
+  "font": "../../Assets/Fonts/GameFont.ttf",
+  "fontlar": {"ja": "/path/to/NotoSansJP-Bold.otf", "ko": "/path/to/NotoSansKR-Bold.otf"},
+  "palet": {"koyu": "#1b1030", "ana": "#4a2a80", "vurgu": "#ffc23d", "acik": "#fff6e4"},
+  "kareler": ["../../captures/store-src/01.png", "../../captures/store-src/02.png", "../../captures/store-src/03.png",
+              "../../captures/store-src/04.png", "../../captures/store-src/05.png", "../../captures/store-src/06.png",
+              "../../captures/store-src/07.png", "../../captures/store-src/08.png"],
+  "odak": ["../../captures/store-src/hero.png"],
+  "logo": "../../Assets/Art/logo.png",
+  "diller": {
+    "en-US": {
+      "ad": "Game Name: Tower Smash",
+      "kisa": "Aim, fire and bring every tower down before your moves run out.",
+      "uzun": "First sentence: what the player does and why it feels good.\n\nFEATURES\n• ...\n• ...",
+      "basliklar": ["Aim and fire", "Topple the tower", "Chain reactions", "Hundreds of levels",
+                    "Moving platforms", "Combine boosters", "Daily challenges", "Relax and smash"],
+      "grafik": "One shot. One tower. Down it goes.",
+      "fragman": ["Aim", "Fire", "Watch it fall"],
+      "kapanis": "Hundreds of towers are waiting"
+    }
+  },
+  "fragman": {
+    "bolumler": [{"klip": "../../video_clip/level12.mp4", "bas": 1.0, "son": 6.5},
+                 {"klip": "../../video_clip/level40.mp4", "bas": 0.5, "son": 7.0},
+                 {"klip": "../../video_clip/level85.mp4", "bas": 2.0, "son": 9.0}],
+    "giris_sn": 2.0, "kapanis_sn": 2.5, "gecis_sn": 0.35,
+    "gecisler": ["slideleft", "zoomin", "wipeup", "circleopen"],
+    "muzik": "../../Assets/Audio/music.mp3",
+    "kisa_sn": 15
+  }
+}
