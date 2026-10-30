@@ -5,13 +5,16 @@
 
 Copies the files to <teslim_dir>/<YYYY-MM-DD>/<HHMM>_<ID>_<short-name>/ as
 NN_<ascii name>, writes README.md there, puts the entry on top of TESLIMLER.md,
-fills the task file's "## Teslim" section and marks the task teslimde. Prints
+fills the task file's "## Teslim" section and marks the task teslimde. iz.json in
+the folder fingerprints the files the branch changed, so `tasks.py bayat` can tell
+when the evidence no longer shows the code. Prints
 every full path in a code block, one per line, ready to paste into an editor.
 """
 import argparse
 import datetime
 import json
 import os
+import re
 import shutil
 import sys
 
@@ -49,6 +52,8 @@ def main(argv=None):
         dst = os.path.join(out, f"{i:02d}_{ascii_name(src)}")
         (shutil.copytree if os.path.isdir(src) else shutil.copy2)(src, dst)
         copied.append(dst)
+    with open(os.path.join(out, "iz.json"), "w") as f:
+        json.dump(tasks.fingerprint(a.project, tasks.touched_files(a.project)), f, ensure_ascii=False, indent=1)
     readme = os.path.join(out, "README.md")
     with open(readme, "w") as f:
         f.write(f"# {t['id']} — {t['is']}\n\n{now:%Y-%m-%d %H:%M}\n\n" + (a.note + "\n\n" if a.note else "")
@@ -74,6 +79,8 @@ def main(argv=None):
             mark = "## Teslim\n"
             i = s.find(mark)
             s = s[:i + len(mark)] + block + s[i + len(mark):] if i >= 0 else s + "\n" + mark + block
+            s = (re.sub(r"^teslim: .*$", f"teslim: {out}", s, count=1, flags=re.M) if re.search(r"^teslim: ", s, re.M)
+                 else s.replace("\n---\n", f"\nteslim: {out}\n---\n", 1))
             with open(p, "w") as f:
                 f.write(s)
     tasks.set_status(a.project, lines, ts, t, "teslimde")

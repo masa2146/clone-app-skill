@@ -37,13 +37,17 @@ project root. If `Docs/TASKS.md` is missing, tell the user to run `/clone-build 
 
 ## bitir <ID>
 
-Only after the user said yes: `git switch main && git merge --no-ff <branch>`, run
+Only after the user said yes. First `python3 $T/tasks.py bayat`: if this task is
+BAYAT, the code changed after the evidence was made; re-run the gate, deliver
+again with teslim.py and ask again instead of merging. Then
+`git switch main && git merge --no-ff <branch>`, run
 the tests once more on main, then `python3 $T/tasks.py set <ID> bitti`. Never push.
 
 ## durum
 
-`python3 $T/tasks.py list --open` and the "Şu an" block of `Docs/TASKS.md`; report
-running, waiting-for-approval and next in three lines.
+`python3 $T/tasks.py list --open`, `python3 $T/tasks.py bayat` and the "Şu an" block
+of `Docs/TASKS.md`; report running, waiting-for-approval (with "kanıt bayat" where
+bayat says so) and next in three lines.
 
 ## ekle "<iş>" --faz "<F..>"
 
