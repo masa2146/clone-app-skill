@@ -1,6 +1,6 @@
 {
   "name": "clone-build",
-  "version": "0.4.3",
+  "version": "0.4.4",
   "description": "Turn a clone-build-spec.md plus its $WORK artifacts into running, verified, production-ready code for apps (Flutter / native / RN) or games (Unity via MCP), driving a gated task graph.",
   "author": {
     "name": "masa2146"

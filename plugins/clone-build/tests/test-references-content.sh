@@ -14,5 +14,8 @@ done
 for kw in "SKIP" "gate" "visual-diff"; do
   need "$R/build-report-template.md" "$kw"
 done
+for kw in "learning player" "ablation" "sequence referee" "regression sweep" "calibrate"; do
+  need "$R/level-pipeline.md" "$kw"
+done
 
 exit $fail
