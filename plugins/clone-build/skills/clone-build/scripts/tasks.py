@@ -7,6 +7,7 @@
     tasks.py list  [--open] [--project DIR]
     tasks.py add   "<work>" --faz "F8 Ekranlar ve meta" [--kapi G9] [--bitti "..."] [--project DIR]
     tasks.py show  <ID> [--project DIR]
+    tasks.py bayat [--project DIR]                 deliveries whose files changed since; exit 1 if any
 
 TASKS.md is written for a person and parsed by this script: one table per phase,
 columns ID | İş | Durum | Kapı | Bitti sayılır | Ayrıntı. The "Şu an" block at the
@@ -16,6 +17,8 @@ longer exists by week three.
 """
 import argparse
 import datetime
+import hashlib
+import json
 import os
 import re
 import subprocess
@@ -168,6 +171,64 @@ def set_status(project, lines, tasks, t, status):
             f.write(re.sub(r"^durum: .*$", f"durum: {status}", s, count=1, flags=re.M))
 
 
+def git(project, *args):
+    return subprocess.run(["git", "-C", project, *args], capture_output=True, text=True)
+
+
+def touched_files(project):
+    """Files this branch changed against main/master, committed or not: what a delivery shows."""
+    for main in ("main", "master"):
+        base = git(project, "merge-base", main, "HEAD")
+        if base.returncode == 0:
+            break
+    else:
+        return []
+    names = git(project, "diff", "-z", "--name-only", base.stdout.strip()).stdout.split("\0")
+    names += git(project, "ls-files", "-z", "--others", "--exclude-standard").stdout.split("\0")
+    # the task books change on every status move; they are not what the evidence shows
+    return sorted({n for n in names if n and n != "Docs/TASKS.md" and not n.startswith("Docs/tasks/")})
+
+
+def fingerprint(project, files):
+    out = {}
+    for f in files:
+        p = os.path.join(project, f)
+        out[f] = hashlib.sha256(open(p, "rb").read()).hexdigest() if os.path.isfile(p) else None
+    return out
+
+
+def stale(project, t):
+    """Files that changed since the task was delivered; None when the delivery has no fingerprint."""
+    p = os.path.join(project, t["ayrinti"]) if t["ayrinti"] else ""
+    if not p or not os.path.exists(p):
+        return None
+    m = re.search(r"^teslim: (.+)$", open(p).read(), flags=re.M)
+    iz = os.path.join(m.group(1).strip(), "iz.json") if m else ""
+    if not iz or not os.path.exists(iz):
+        return None
+    then = json.load(open(iz))
+    if not then:     # delivered off git or from main: nothing to compare
+        return None
+    now = fingerprint(project, then)
+    return [f for f in then if then[f] != now[f]]
+
+
+def cmd_bayat(a):
+    _, tasks = load(a.project)
+    bad = 0
+    for t in (t for t in tasks if t["durum"] == "teslimde"):
+        changed = stale(a.project, t)
+        if changed is None:
+            print(f"{t['id']}: teslimin izi yok, kontrol edilemedi")
+        elif changed:
+            bad += 1
+            print(f"{t['id']}: BAYAT — teslimden sonra {len(changed)} dosya değişti, kanıtı yeniden çek:\n  "
+                  + "\n  ".join(changed[:20]))
+        else:
+            print(f"{t['id']}: güncel")
+    return 1 if bad else 0
+
+
 def cmd_set(a):
     if a.status not in STATUSES:
         sys.exit(f"ERROR: status must be one of {', '.join(STATUSES)}")
@@ -217,7 +278,7 @@ def cmd_add(a):
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     sub = ap.add_subparsers(dest="cmd", required=True)
-    for name in ("next", "set", "list", "add", "show"):
+    for name in ("next", "set", "list", "add", "show", "bayat"):
         p = sub.add_parser(name)
         p.add_argument("--project", default=".")
         if name == "next":
@@ -236,7 +297,7 @@ def main(argv=None):
     a = ap.parse_args(argv)
     if not os.path.exists(tasks_path(a.project)):
         sys.exit(f"ERROR: {tasks_path(a.project)} not found — run `/clone-build kur` first")
-    return {"next": cmd_next, "set": cmd_set, "list": cmd_list, "add": cmd_add, "show": cmd_show}[a.cmd](a)
+    return {"next": cmd_next, "set": cmd_set, "list": cmd_list, "add": cmd_add, "show": cmd_show, "bayat": cmd_bayat}[a.cmd](a)
 
 
 if __name__ == "__main__":

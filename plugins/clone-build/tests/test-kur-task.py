@@ -83,6 +83,9 @@ def main():
     d = open(os.path.join(proj, "Docs", "tasks", detail[0])).read()
     check("task file has the paths and status teslimde", "01_ekran-goruntusu-1.png" in d and "durum: teslimde" in d)
 
+    code, out = run("tasks.py", "bayat", "--project", proj)
+    check("bayat without git: says it cannot check, does not block", code == 0 and "izi yok" in out)
+
     code, out = run("tasks.py", "set", "T001", "bitti", "--project", proj)
     code, out = run("tasks.py", "add", "Yeni iş", "--faz", "F0 Kararlar", "--project", proj)
     md = open(os.path.join(proj, "Docs", "TASKS.md")).read()
@@ -92,6 +95,26 @@ def main():
     code, out = run("tasks.py", "next", "--project", proj)
     check("next moves on to T002", "T002" in out)
     check("bad status refused", run("tasks.py", "set", "T002", "yarim", "--project", proj)[0] != 0)
+
+    # stale delivery: the code changes after the evidence was made
+    g = lambda *c: subprocess.run(["git", "-C", proj, *c], capture_output=True, text=True)
+    g("init", "-q", "-b", "main"); g("add", "-A")
+    g("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "base")
+    run("tasks.py", "set", "T002", "bitti", "--project", proj)
+    code, out = run("tasks.py", "next", "--project", proj)
+    t3 = next(l.split()[0] for l in run("tasks.py", "list", "--open", "--project", proj)[1].splitlines() if "sürüyor" in l)
+    src = os.path.join(proj, "Assets", "Ekran.cs")
+    os.makedirs(os.path.dirname(src), exist_ok=True)
+    open(src, "w").write("v1")
+    run("teslim.py", t3, "ekran", ev, "--project", proj)
+    code, out = run("tasks.py", "bayat", "--project", proj)
+    check("fresh delivery is güncel", code == 0 and f"{t3}: güncel" in out)
+    open(src, "w").write("v2")
+    code, out = run("tasks.py", "bayat", "--project", proj)
+    check("changed file after delivery -> BAYAT, exit 1, names the file",
+          code == 1 and "BAYAT" in out and "Assets/Ekran.cs" in out)
+    open(src, "w").write("v1")
+    check("reverting the change makes it güncel again", run("tasks.py", "bayat", "--project", proj)[0] == 0)
 
     print(f"\n{len(fails)} failed" if fails else "\nall passed")
     return 1 if fails else 0
