@@ -168,7 +168,7 @@ game plan is not built from them. It is built from what a game actually needs:
 | `engine-settings` | `game-assets/project-settings/`, `physics.json` | build — measured settings applied **before** gameplay code |
 | `art-import` | `asset-guide/ASSET-INDEX.tsv`, grouped by archetype | build — prefabs built **from `entity.json` → `nodes`** (hierarchy, local TRS, per-slot materials, debris under a disabled root) |
 | `mechanic` | the chapter headings of `reconstruction/02-GAMEPLAY-MECHANICS.md` | tdd |
-| `level-pipeline` | schema · editor + image importer · loader with mid-level save | tdd — a board round-trips unchanged |
+| `level-pipeline` | schema · editor + image importer · loader with mid-level save; then the measuring player, factor costs, planned generator and referees in the order of `references/level-pipeline.md` | tdd — a board round-trips unchanged |
 | `scene` | the **real canvas dump** `game-assets/ui/*.json`, largest first | visual-diff |
 | `tuning` | the sections of `reconstruction/05-UNKNOWNS.md` | manual — run the experiment or defer explicitly, never invent |
 

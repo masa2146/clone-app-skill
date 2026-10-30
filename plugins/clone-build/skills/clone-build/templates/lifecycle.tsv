@@ -24,9 +24,10 @@ T041	F8 Ekranlar ve meta	*	Yerelleştirme	Metin dinamik, görsele gömülü değ
 T050	F9 Sanat ve ses	*	Yayın denetimi sayacı	Build'deki orijinal dosya sayısı komutla ölçülüyor ve TASKS "Şu an"da	G13
 T060	F9 Sanat ve ses	*	Ses	Kaynaklar lisanslı; ses olayı haritası referansla aynı; "her olay ses çalıyor" testi (sessiz kalan olay yok)	G9, G10
 T061	F9 Sanat ve ses	*	Yazı tipi	OFL; Türkçe glifler; bütün ekranlarda çekim	G9
-T070	F10 Seviyeler	*	Kaynak seviyelerin analizi	Zorluk eğrisi, aile dağılımı, tekrarlar, hatalı orijinaller ölçüldü; tasarım kuralları yazıldı	G1
-T071	F10 Seviyeler	*	Üreteç ve L0/L1/L2 kapıları	Tek komutla, kaldığı yerden devam eden hat; tuzaklar skill'in kural tablosunda	G7
-T072	F10 Seviyeler	*	Hakem	Karar JSON'u, kör alt ajan, göz katmanı, en çok 3 tur; istem şablonları depoda	G6, G8
+T070	F10 Seviyeler	*	Kaynak seviyelerin analizi	Zorluk eğrisi, aile dağılımı, tekrarlar, hatalı orijinaller ölçüldü; zorluk etiketi seviye numarasına göre tabloya döküldü ve ritmi (tasarımcının hedefi) yazıldı; tasarım kuralları yazıldı (`references/level-pipeline.md` §1)	G1
+T073	F10 Seviyeler	*	Ölçen oyuncu ve kalibrasyon	Çözücü (kurallar bitirmeye izin veriyor mu) ve öğrenen insan benzeri oyuncu (kaçıncı denemede geçti); ilerleme yoksa pes etme, dolu kuyruğa dokunmama korumaları; kaynak oyunun seviyelerinde ölçülen bant × etiket tablosu, sıra bozulmuyor (§2)	G7
+T071	F10 Seviyeler	*	Üreteç ve L0/L1/L2 kapıları	Tek komutla, kaldığı yerden devam eden hat; zorluk ölçülmüş etken maliyetleriyle (konuma bağlı, kontrollü deneyle) plan olarak kuruluyor, çeşitlilik zorluktan ayrı; 10'luk blok planı ve kurgu kataloğu; tuzaklar skill'in kural tablosunda (§3)	G7
+T072	F10 Seviyeler	*	Hakem	Otomatik kapılar + seviye hakemi + 10 seviyelik sıra hakemi; karar JSON'u, kör alt ajan, göz katmanı, en çok 3 tur; talimatta ölçen oyuncunun bilinen zaafı yazılı; istem şablonları depoda (§4)	G6, G8
 T080	F11 Dayanıklılık	*	Kayıt/devam ve arka plan	Kayıttan devam taraması bütün seviyelerde birebir; arka plana alma, bozuk kayıt, çevrimdışı ve cihaz saatini oynatma (zamanlı ödül hilesi) testleri; kayıt sürümlü, eski sürümün kaydı yeni sürümde açılıyor	G7
 T090	F12 Para, veri, sunucu	*	Sunucu	Kimlik, kayıt, liderlik, satın alma doğrulama, hesap silme, iade işi, yedek; testler; yayından önce `/cso`	—
 T091	F12 Para, veri, sunucu	*	Uygulama içi satın alma	Ürünler tanımlı (BILLING izinli AAB yüklenmeden ürün açılamaz); test satın alması telefonda	G12
