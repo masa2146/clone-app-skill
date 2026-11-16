@@ -14,6 +14,16 @@ proje bilgisi `Docs/project.json`.
 - İş biterken: kapı kontrolleri → `teslim.py` → kullanıcıya "birleştireyim mi?" →
   evet ise `git merge --no-ff` ve `tasks.py set <ID> bitti`.
 
+## Paralel oturumlar ve disk
+
+- Bu projede başka bir oturum da çalışıyorsa iş `/task sonraki --worktree` ile kendi klasöründe
+  yapılır; ana klasör hep main'de kalır, aynı klasörde dal değiştirilmez. Durum belgesinde her oturum yalnız kendi satırını
+  günceller; main'e birleştiren önce öbür oturuma yazar. Oturumlar arası mesaj varsa kullanıcı
+  aracı yapılmaz.
+- Birleşen worktree `tasks.py temizle --yes` ile silinir. Kare dizileri mp4 üretilince silinir;
+  yapılardan yalnız yayındaki ve sonuncu tutulur; loglar `Logs/` altında. Yer tahmini `du` ile
+  değil `df` öncesi/sonrası ile ölçülür. Okunmamış bir temizlik aracında `--help` denenmez.
+
 ## Teslim
 
 - Her teslim `teslim.py` ile `{teslim_dir}/<tarih>/<saat>_<ID>_<ad>/` altına kopyalanır ve

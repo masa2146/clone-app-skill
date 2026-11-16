@@ -35,6 +35,7 @@ def main(argv=None):
     ap.add_argument("--not", dest="note", default="")
     ap.add_argument("--project", default=".")
     a = ap.parse_args(argv)
+    a.project = tasks.book(a.project)
 
     with open(os.path.join(a.project, "Docs", "project.json")) as f:
         teslim_dir = json.load(f)["teslim_dir"]
@@ -53,7 +54,8 @@ def main(argv=None):
         (shutil.copytree if os.path.isdir(src) else shutil.copy2)(src, dst)
         copied.append(dst)
     with open(os.path.join(out, "iz.json"), "w") as f:
-        json.dump(tasks.fingerprint(a.project, tasks.touched_files(a.project)), f, ensure_ascii=False, indent=1)
+        src = tasks.code_dir(a.project, t)
+        json.dump(tasks.fingerprint(src, tasks.touched_files(src)), f, ensure_ascii=False, indent=1)
     readme = os.path.join(out, "README.md")
     with open(readme, "w") as f:
         f.write(f"# {t['id']} — {t['is']}\n\n{now:%Y-%m-%d %H:%M}\n\n" + (a.note + "\n\n" if a.note else "")
