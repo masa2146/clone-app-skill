@@ -2,7 +2,7 @@
 allowed-tools: Bash, Read, Glob, Grep, Write, Edit, Skill, Agent
 description: Run the project's task loop — next task, its detail file, gates, dated delivery, merge on approval
 user-invocable: true
-argument-hint: sonraki | durum | bitir <ID> | ekle "<iş>" --faz "<F..>"
+argument-hint: sonraki [--worktree] | durum | bitir <ID> | ekle "<iş>" --faz "<F..>"
 argument: subcommand (default sonraki)
 ---
 
@@ -16,7 +16,13 @@ project root. If `Docs/TASKS.md` is missing, tell the user to run `/clone-build 
 
 1. `python3 $T/tasks.py next` — it marks the task `sürüyor`, writes
    `Docs/tasks/<ID>-<ad>.md` and switches to the task's branch. If a task is already
-   running it names that one: continue it instead.
+   running it names that one: continue it instead. **If another session is working in
+   this project** (check the agent list / the status doc's parallel table), use
+   `tasks.py next --worktree`: the task gets its own folder `../<repo>-<branch>`; write
+   code there. The task book stays in the main checkout — tasks.py and teslim.py find it
+   from either folder, so a task branch never edits `Docs/TASKS.md`. Once a project uses worktrees,
+   the main checkout stays on main (tasks.py warns otherwise); `temizle` deletes only
+   worktrees whose task the book marks `bitti` and whose branch is merged.
 2. Fill the detail file before touching code: Özet (what and why, the "bitti sayılır"
    line restated as checks), Plan in superpowers **writing-plans** format (use the
    skill when installed; otherwise the same headings by hand), Teknik.
@@ -39,15 +45,25 @@ project root. If `Docs/TASKS.md` is missing, tell the user to run `/clone-build 
 
 Only after the user said yes. First `python3 $T/tasks.py bayat`: if this task is
 BAYAT, the code changed after the evidence was made; re-run the gate, deliver
-again with teslim.py and ask again instead of merging. Then
-`git switch main && git merge --no-ff <branch>`, run
-the tests once more on main, then `python3 $T/tasks.py set <ID> bitti`. Never push.
+again with teslim.py and ask again instead of merging. Then, in
+the main checkout: `git status` — files the build regenerates every time (listed in
+KARARLAR) are restored; anything else dirty stops the merge and goes to the user.
+`git switch main && git merge --no-ff <branch>`, run the tests once more on main,
+`python3 $T/tasks.py set <ID> bitti`, commit `Docs/TASKS.md` and `Docs/tasks/` on main,
+then `python3 $T/tasks.py temizle --yes` (removes the merged worktree; one with unsaved
+work is kept and named). If another session works in this project, tell it about the
+merge before anyone pushes. Never push unless the user asks.
 
 ## durum
 
-`python3 $T/tasks.py list --open`, `python3 $T/tasks.py bayat` and the "Şu an" block
-of `Docs/TASKS.md`; report running, waiting-for-approval (with "kanıt bayat" where
-bayat says so) and next in three lines.
+`python3 $T/tasks.py list --open`, `python3 $T/tasks.py bayat`, `python3 $T/tasks.py disk`
+and the "Şu an" block of `Docs/TASKS.md`; report running, waiting-for-approval (with
+"kanıt bayat" where bayat says so) and next in three lines, plus one line when the disk
+is under its threshold.
+
+When a task's phase starts, read that phase's section of
+`${CLAUDE_PLUGIN_ROOT}/skills/clone-build/references/lessons.md` — the traps two shipped
+clones paid days for.
 
 ## ekle "<iş>" --faz "<F..>"
 

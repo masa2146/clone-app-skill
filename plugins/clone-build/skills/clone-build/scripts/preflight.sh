@@ -15,6 +15,13 @@ if command -v adb >/dev/null 2>&1; then
   fi
 fi
 
+# day-one hygiene (lessons.md #4, #7): free disk in GB, transcript retention in days (null = default 30)
+disk_free_gb=$(df -k . 2>/dev/null | awk 'NR==2{printf "%d", $4/1048576}')
+cleanup_days=$(python3 -c 'import json,os;p=os.path.expanduser("~/.claude/settings.json");print(json.load(open(p)).get("cleanupPeriodDays","null") if os.path.exists(p) else "null")' 2>/dev/null || echo null)
+[[ -z "$disk_free_gb" ]] && disk_free_gb=null
+[[ "$disk_free_gb" != null && "$disk_free_gb" -lt 50 ]] && echo "WARNING: only ${disk_free_gb} GB free (lessons.md #7)" >&2
+[[ "$cleanup_days" == null || "$cleanup_days" -lt 365 ]] 2>/dev/null && echo "WARNING: cleanupPeriodDays is ${cleanup_days} — set >= 365 in ~/.claude/settings.json (lessons.md #4)" >&2
+
 json="$(cat <<JSON
 {
   "unity": $(have unity),
@@ -23,7 +30,9 @@ json="$(cat <<JSON
   "node": $(have node),
   "adb": $(have adb),
   "adb_device": $adb_device,
-  "python3": $(have python3)
+  "python3": $(have python3),
+  "disk_free_gb": $disk_free_gb,
+  "cleanup_period_days": $cleanup_days
 }
 JSON
 )"

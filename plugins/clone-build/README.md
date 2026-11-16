@@ -23,12 +23,19 @@ exits 0 — the model never self-certifies. Execution uses
 
 ## Scripts
 - `detect-branch.sh` — spec → `game|app` + substack.
-- `preflight.sh` — probe Unity / flutter / gradle / node / adb → JSON.
+- `preflight.sh` — probe Unity / flutter / gradle / node / adb, free disk and transcript retention → JSON.
 - `gen-build-plan.py` — spec + artifacts → `build-plan.json` (deterministic).
 - `run-gate.sh` — single gate-execution chokepoint.
 - `scaffold-project.py` — `/clone-build kur`: day-one layout (CLAUDE.md, `Docs/TASKS.md`
   from `templates/lifecycle.tsv`, `.gitignore`, delivery folder, clone-app's Unity kit).
-- `tasks.py` — `/task`: next task, its detail file and branch; status, add, list.
+- `tasks.py` — `/task`: next task, its detail file and branch (`--worktree`: its own folder for
+  parallel sessions); status, add, list; `bayat` (stale evidence); `temizle` (remove merged
+  worktrees, measured with df); `disk` (free-space threshold).
+
+## References
+- `references/lessons.md` — traps two shipped clones paid days for, by phase, linked from the
+  lifecycle rows: store clocks, disk budget, faithful-copy freeze, phone-only bugs, purchases,
+  remote updates, Unity build traps, store review.
 - `teslim.py` — copy a task's evidence to `<teslim-root>/<game>/teslim/<date>/` and print full paths.
 
 ## Tests

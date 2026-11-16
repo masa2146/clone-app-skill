@@ -93,7 +93,14 @@ kit and the bootstrap (step P1b) — the bootstrap `CLAUDE.md` lands as
 runs `-createProject` and adds `com.unity.ugui`. Existing files are never touched.
 From then on every session is `/task sonraki` → work → gate → `teslim.py` →
 "birleştireyim mi?" (`commands/task.md`). Task details are written when the task
-starts, not up front.
+starts, not up front. Parallel sessions use `/task sonraki --worktree` (one folder per
+task, deleted on merge by `tasks.py temizle`).
+
+**`references/lessons.md`** is the trap catalogue of two shipped clones, by phase:
+store clocks to start on day one, disk budget, faithful-copy freeze, phone-only
+visual bugs, state-machine and purchase tests, what remote updates may and may not
+change, Unity build traps, store review. Each lifecycle row links its items; read a
+phase's section when its first task starts.
 
 ## P1: Project scaffold
 Per the loaded branch guide, scaffold an empty **buildable** project into

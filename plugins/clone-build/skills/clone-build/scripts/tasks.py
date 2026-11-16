@@ -1,8 +1,13 @@
 #!/usr/bin/env python3
 """Docs/TASKS.md — the one task list of a game project — and its detail files. Stdlib only.
 
-    tasks.py next  [--project DIR] [--no-branch]   pick the next open task, mark it running,
-                                                   open Docs/tasks/<ID>-<slug>.md, branch <id>-<slug>
+    tasks.py next  [--project DIR] [--no-branch] [--worktree]
+                                                   pick the next open task, mark it running,
+                                                   open Docs/tasks/<ID>-<slug>.md, branch <id>-<slug>;
+                                                   --worktree: the branch gets its own folder
+                                                   ../<repo>-<id>-<slug> so parallel sessions never share one
+    tasks.py temizle [--yes] [--project DIR]       remove worktrees whose branch is merged into main
+    tasks.py disk  [--min-gb 50] [--project DIR]   free space + merged worktrees still on disk; exit 1 if low
     tasks.py set   <ID> <status> [--project DIR]   bekliyor | sürüyor | teslimde | bitti | beklemede
     tasks.py list  [--open] [--project DIR]
     tasks.py add   "<work>" --faz "F8 Ekranlar ve meta" [--kapi G9] [--bitti "..."] [--project DIR]
@@ -21,6 +26,7 @@ import hashlib
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 import unicodedata
@@ -36,6 +42,17 @@ def slug(text, limit=40):
     t = unicodedata.normalize("NFKD", text.replace("ı", "i").replace("İ", "I"))
     t = "".join(c for c in t if not unicodedata.combining(c)).lower()
     return re.sub(r"[^a-z0-9]+", "-", t).strip("-")[:limit].strip("-") or "is"
+
+
+def book(project):
+    """The task book lives in the main checkout only. Run from a linked worktree (or any
+    subfolder), every command is redirected there, so a task branch never edits TASKS.md and
+    parallel merges cannot conflict."""
+    r = subprocess.run(["git", "-C", project, "rev-parse", "--path-format=absolute", "--git-common-dir"],
+                       capture_output=True, text=True)
+    if r.returncode == 0 and os.path.basename(r.stdout.strip().rstrip("/")) == ".git":
+        return os.path.dirname(r.stdout.strip().rstrip("/"))
+    return project
 
 
 def tasks_path(project):
@@ -93,6 +110,7 @@ is: {is_}
 faz: {faz}
 durum: sürüyor
 dal: {branch}
+calisma: {workdir}
 kapi: {kapi}
 basladi: {date}
 oturum_sayisi: 1
@@ -127,12 +145,34 @@ Bu işten doğan yeni işler (`tasks.py add` ile TASKS.md'ye de girer).
 """
 
 
+def free_gb(path):
+    return shutil.disk_usage(path).free / 1024 ** 3
+
+
+def add_worktree(project, branch):
+    """../<repo>-<branch> on its own folder. Unity's Library is cloned (APFS `cp -c`: no extra
+    space until Unity rewrites it) so the first editor run does not re-import for an hour."""
+    wt = os.path.join(os.path.dirname(os.path.abspath(project)), f"{os.path.basename(os.path.abspath(project))}-{branch}")
+    if os.path.isdir(wt):
+        return wt
+    exists = git(project, "rev-parse", "--verify", branch).returncode == 0
+    r = git(project, "worktree", "add", wt, *([branch] if exists else ["-b", branch]))
+    if r.returncode != 0:
+        sys.exit(f"ERROR: git worktree add failed: {r.stderr.strip()}")
+    lib = os.path.join(project, "Library")
+    if os.path.isdir(lib) and not os.path.exists(os.path.join(wt, "Library")):
+        if subprocess.run(["cp", "-cR", lib, os.path.join(wt, "Library")], capture_output=True).returncode != 0:
+            print("Not: Library kopyalanamadı; Unity ilk açılışta yeniden içe aktarır.")
+    return wt
+
+
 def cmd_next(a):
     lines, tasks = load(a.project)
     running = [t for t in tasks if t["durum"] == "sürüyor"]
-    if running:
+    if running and not a.worktree:
         t = running[0]
-        print(f"Zaten süren iş var: {t['id']} {t['is']} -> {t['ayrinti'] or 'ayrıntı yok'}")
+        print(f"Zaten süren iş var: {t['id']} {t['is']} -> {t['ayrinti'] or 'ayrıntı yok'}\n"
+              "Paralel ikinci bir iş için: tasks.py next --worktree")
         return 0
     t = next((t for t in tasks if t["durum"] == "bekliyor"), None)
     if t is None:
@@ -143,19 +183,32 @@ def cmd_next(a):
     path = os.path.join(a.project, rel)
     os.makedirs(os.path.dirname(path), exist_ok=True)
     branch = name.lower()
+    is_git = os.path.exists(os.path.join(a.project, ".git"))
+    workdir = os.path.abspath(a.project)
+    if a.worktree and is_git:
+        cur = git(a.project, "branch", "--show-current").stdout.strip()
+        if cur not in ("main", "master"):
+            print(f"UYARI: ana klasör '{cur}' dalında. Worktree kullanılan projede ana klasör hep main'de "
+                  "kalır; yoksa defter o görev dalına yazılır.")
+        workdir = add_worktree(a.project, branch)
+    elif not a.no_branch and is_git:
+        exists = git(a.project, "rev-parse", "--verify", branch).returncode == 0
+        subprocess.run(["git", "-C", a.project, "switch"] + ([] if exists else ["-c"]) + [branch],
+                       capture_output=True)
     if not os.path.exists(path):
         with open(path, "w") as f:
             f.write(DETAIL.format(id=t["id"], is_=t["is"], faz=t["faz"], branch=branch, kapi=t["kapi"] or "—",
-                                  bitti=t["bitti"], date=datetime.date.today().isoformat()))
+                                  bitti=t["bitti"], date=datetime.date.today().isoformat(), workdir=workdir))
     t["durum"], t["ayrinti"] = "sürüyor", rel
     save(a.project, lines, tasks)
-    if not a.no_branch and os.path.isdir(os.path.join(a.project, ".git")):
-        exists = subprocess.run(["git", "-C", a.project, "rev-parse", "--verify", branch],
-                                capture_output=True).returncode == 0
-        subprocess.run(["git", "-C", a.project, "switch"] + ([] if exists else ["-c"]) + [branch],
-                       capture_output=True)
     print(f"Sıradaki iş: {t['id']} — {t['is']}\nFaz: {t['faz']} · Kapı: {t['kapi'] or '—'}\n"
           f"Bitti sayılır: {t['bitti']}\nAyrıntı dosyası: {os.path.abspath(path)}\nDal: {branch}")
+    if workdir != os.path.abspath(a.project):
+        print(f"Çalışma klasörü: {workdir}\n"
+              f"Kod orada yazılır; defter (TASKS.md, ayrıntı dosyası) ana klasörde kalır: "
+              f"tasks.py ve teslim.py'yi --project {os.path.abspath(a.project)} ile çalıştır.")
+    if free_gb(a.project) < 50:
+        print(f"UYARI: diskte {free_gb(a.project):.0f} GB boş. `tasks.py disk` ve `tasks.py temizle` ile bak.")
     return 0
 
 
@@ -197,6 +250,16 @@ def fingerprint(project, files):
     return out
 
 
+def code_dir(project, t):
+    """Where the task's code lives: its worktree when it has one, else the project."""
+    p = os.path.join(project, t["ayrinti"]) if t["ayrinti"] else ""
+    if p and os.path.exists(p):
+        m = re.search(r"^calisma: (.+)$", open(p).read(), flags=re.M)
+        if m and os.path.isdir(m.group(1).strip()):
+            return m.group(1).strip()
+    return project
+
+
 def stale(project, t):
     """Files that changed since the task was delivered; None when the delivery has no fingerprint."""
     p = os.path.join(project, t["ayrinti"]) if t["ayrinti"] else ""
@@ -209,7 +272,7 @@ def stale(project, t):
     then = json.load(open(iz))
     if not then:     # delivered off git or from main: nothing to compare
         return None
-    now = fingerprint(project, then)
+    now = fingerprint(code_dir(project, t), then)
     return [f for f in then if then[f] != now[f]]
 
 
@@ -227,6 +290,91 @@ def cmd_bayat(a):
         else:
             print(f"{t['id']}: güncel")
     return 1 if bad else 0
+
+
+def worktrees(project):
+    """[(path, branch)] of the project's extra worktrees (the main checkout excluded)."""
+    out, cur = [], {}
+    for line in git(project, "worktree", "list", "--porcelain").stdout.splitlines() + [""]:
+        if not line:
+            if cur:
+                out.append((cur.get("worktree"), cur.get("branch", "").replace("refs/heads/", "")))
+            cur = {}
+        else:
+            k, _, v = line.partition(" ")
+            cur[k] = v
+    main_path = os.path.realpath(project)
+    return [(p, b) for p, b in out if p and os.path.realpath(p) != main_path]
+
+
+def done_branches(project):
+    """Branches of tasks the book marks bitti. A fresh task branch with no commits counts as
+    'merged' to git (its tip is inside main) — only the book can tell it is still being worked on."""
+    _, ts = load(project)
+    out = set()
+    for t in ts:
+        p = os.path.join(project, t["ayrinti"]) if t["ayrinti"] else ""
+        if t["durum"] == "bitti" and p and os.path.exists(p):
+            m = re.search(r"^dal: (.+)$", open(p).read(), flags=re.M)
+            if m:
+                out.add(m.group(1).strip())
+    return out
+
+
+def merged_worktrees(project):
+    """Worktrees safe to delete: the book says the task is bitti, git says the branch is merged
+    into main, and nothing is uncommitted (ignored files like Library/ do not count — they are
+    regenerable and are what fills the disk). Worktrees the book does not know are never touched."""
+    main = next((m for m in ("main", "master") if git(project, "rev-parse", "--verify", m).returncode == 0), None)
+    if not main:
+        return [], []
+    merged = {b.strip(" *+") for b in git(project, "branch", "--merged", main).stdout.splitlines()}
+    done = done_branches(project)
+    safe, keep = [], []
+    for p, b in worktrees(project):
+        if b not in merged or b not in done:
+            keep.append((p, b, "iş bitmedi ya da defterde yok"))
+        elif git(p, "status", "--porcelain").stdout.strip():
+            keep.append((p, b, "kaydedilmemiş değişiklik var"))
+        else:
+            safe.append((p, b))
+    return safe, keep
+
+
+def cmd_temizle(a):
+    safe, keep = merged_worktrees(a.project)
+    for p, b, why in keep:
+        print(f"KALIYOR ({why}): {p} [{b}]")
+    if not safe:
+        print("Silinecek birleşmiş worktree yok.")
+        return 0
+    before = free_gb(a.project)
+    for p, b in safe:
+        if a.yes:
+            r = git(a.project, "worktree", "remove", p)  # git refuses a dirty one itself
+            print(("silindi: " if r.returncode == 0 else f"silinemedi ({r.stderr.strip()}): ") + f"{p} [{b}]")
+        else:
+            print(f"silinebilir: {p} [{b}]")
+    if a.yes:
+        git(a.project, "worktree", "prune")
+        print(f"Boş yer: {before:.1f} GB -> {free_gb(a.project):.1f} GB (df ile ölçüldü, du değil)")
+    else:
+        print("Silmek için: tasks.py temizle --yes")
+    return 0
+
+
+def cmd_disk(a):
+    gb = free_gb(a.project)
+    safe, _ = merged_worktrees(a.project) if os.path.exists(os.path.join(a.project, ".git")) else ([], [])
+    print(f"Boş disk: {gb:.0f} GB" + (f" — {a.min_gb} GB eşiğinin altında" if gb < a.min_gb else ""))
+    if safe:
+        print(f"Birleşmiş ama diskte duran {len(safe)} worktree var: tasks.py temizle --yes")
+    if gb < a.min_gb:
+        print("Proje dışı büyük yiyiciler (lessons.md §Disk): eski iOS simülatör runtime'ları "
+              "(xcrun simctl runtime list), Xcode DerivedData, kullanılmayan Android NDK ve system image'lar, "
+              "mp4'e dönmüş kare dizileri, eski yapı arşivleri.")
+        return 1
+    return 0
 
 
 def cmd_set(a):
@@ -278,11 +426,16 @@ def cmd_add(a):
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     sub = ap.add_subparsers(dest="cmd", required=True)
-    for name in ("next", "set", "list", "add", "show", "bayat"):
+    for name in ("next", "set", "list", "add", "show", "bayat", "temizle", "disk"):
         p = sub.add_parser(name)
         p.add_argument("--project", default=".")
         if name == "next":
             p.add_argument("--no-branch", action="store_true")
+            p.add_argument("--worktree", action="store_true")
+        if name == "temizle":
+            p.add_argument("--yes", action="store_true")
+        if name == "disk":
+            p.add_argument("--min-gb", type=float, default=50)
         if name in ("set", "show"):
             p.add_argument("id")
         if name == "set":
@@ -295,9 +448,11 @@ def main(argv=None):
             p.add_argument("--kapi", default="—")
             p.add_argument("--bitti", default="(iş başlayınca yazılır)")
     a = ap.parse_args(argv)
+    a.project = book(a.project)
     if not os.path.exists(tasks_path(a.project)):
         sys.exit(f"ERROR: {tasks_path(a.project)} not found — run `/clone-build kur` first")
-    return {"next": cmd_next, "set": cmd_set, "list": cmd_list, "add": cmd_add, "show": cmd_show, "bayat": cmd_bayat}[a.cmd](a)
+    return {"next": cmd_next, "set": cmd_set, "list": cmd_list, "add": cmd_add, "show": cmd_show, "bayat": cmd_bayat,
+            "temizle": cmd_temizle, "disk": cmd_disk}[a.cmd](a)
 
 
 if __name__ == "__main__":
