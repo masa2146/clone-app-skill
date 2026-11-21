@@ -118,6 +118,9 @@ from the vertical slice on. Tools: `scripts/art/` (`gem.sh` Gemini driver, `fit.
 | modelling, import, shading, phone capture of the picked option | a subagent, briefed with the pick and the board path |
 | "does it match the target?" before delivery | a reviewer subagent with the target and the capture — then the user again |
 
+The Gemini browser is one shared resource: two subagents generating at once drop each
+other's requests, so generation is serial across the whole machine.
+
 A subagent's report that "option B looks best" is a recommendation for the question, never
 an approval. A look reaches the build only after the user's answer.
 

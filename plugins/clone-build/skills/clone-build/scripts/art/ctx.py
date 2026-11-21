@@ -3,7 +3,9 @@
 In-frame rehearsal, BEFORE anything goes into the engine: find the source game's sprite in a screen capture of the running
 game (multi-scale masked template match), erase it (inpaint), drop ours into the same box, and write a sheet:
 full capture (original) | close-up original | close-up ours | full capture (ours).
-  BOX=x,y,w,h   skip the search (small icons < 100 px mis-match; or the sprite is not visible in this capture)
+  BOX=x,y,w,h   skip the search (small icons < 100 px mis-match; or the sprite is not visible in this capture).
+                For a 3D object there is no sprite: crop the object's box from the capture itself, pass that crop as
+                <original_sprite.png> with BOX= its box and FILL=1. An opaque "sprite" erases its whole box — intended.
   FILL=1        large figure on a flat background: fill with the surrounding median instead of inpaint smear
   --full        opaque full-bleed art: only pixels that match the original are replaced
 Only the agent looks at the original; it is never uploaded to a generator. Needs opencv-python-headless, Pillow, numpy.
@@ -38,14 +40,19 @@ def search(C, O, scales, k):
 def main(argv):
     src, cap, ours, out = argv[1:5]
     nums = [float(a) for a in argv[5:] if a[0].isdigit()]
-    lo, hi = (nums + [0.1, 1.5])[:2]
+    if len(nums) not in (0, 2):
+        sys.exit("ctx.py: give both scale_lo and scale_hi, or neither")
+    lo, hi = nums or [0.1, 1.5]
     C = np.array(Image.open(cap).convert("RGB")).astype(np.float32)
     O = Image.open(src).convert("RGBA")
     if os.environ.get("BOX"):
         x, y, w, h = map(int, os.environ["BOX"].split(","))
         v, s = 1.0, w / O.width
     else:
-        v, (s, _, _, _) = search(C, O, np.geomspace(lo, hi, 40), 4)
+        v, hit = search(C, O, np.geomspace(lo, hi, 40), 4)
+        if hit is None:
+            sys.exit("ctx.py: no scale fits the capture — widen scale_lo/scale_hi or pass BOX=x,y,w,h")
+        s = hit[0]
         if max(O.size) * s < 900:
             v, (s, (x, y), w, h) = search(C, O, np.geomspace(s / 1.08, s * 1.08, 9), 1)
         else:

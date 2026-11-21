@@ -40,6 +40,9 @@ check("closed grey hole cleared", a[200, 200] == 0)
 check("subject kept", a[200, 90] == 255)
 subprocess.run([sys.executable, f"{ART}/fit.py", f"{d}/raw.png", f"{d}/out.png", "128x64"], check=True, capture_output=True)
 check("fit lands at the asked size", Image.open(f"{d}/out.png").size == (128, 64))
+subprocess.run([sys.executable, f"{ART}/fit.py", f"{d}/raw.png", f"{d}/outbox.png", "64x64", "box=50,50,300,300"],
+               check=True, capture_output=True)
+check("fit box mode runs", Image.open(f"{d}/outbox.png").size == (64, 64))
 
 import pano  # noqa: E402
 

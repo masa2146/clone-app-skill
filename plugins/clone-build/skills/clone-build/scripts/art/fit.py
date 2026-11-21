@@ -6,6 +6,9 @@ Cut one object generated on a flat grey (#808080) background and fit it into a W
 - Drops loose colourless specks near the background tone, erodes the alpha edge 2 px and softens it (no grey halo).
 - Crops to the subject and fits it (2 % margin), centred; --bottom sits it on the bottom edge (figure cut at the knees);
   --keep cuts but does not crop (full-width strip); --full is a full-bleed picture: no cut, centre-crop to W:H and scale.
+- box=x,y,w,h: grey subject on grey (fur, steel). Inside the subject box the normal cut (tol) keeps the fur; outside it
+  a tight cut (outtol=22, outholes=0.00005) clears the rest. The hole pass can punch the subject's own grey faces
+  (armpits, steel parts): shrink `holes` or use box=.
 Needs Pillow, numpy, scipy.
 """
 import sys
@@ -59,7 +62,17 @@ def main(argv):
             nh = round(w * H / W); im = im.crop((0, (h - nh) // 2, w, (h - nh) // 2 + nh))
         im.resize((W, H), Image.LANCZOS).save(out)
         return
-    im = cut(im, float(kw.get("tol", 14)), float(kw.get("holes", 0.003)))
+    tol, holes = float(kw.get("tol", 14)), float(kw.get("holes", 0.003))
+    if "box" in kw:
+        x, y, w, h = map(int, kw["box"].split(","))
+        inner = cut(im, tol, holes)
+        outer = cut(im, float(kw.get("outtol", 22)), float(kw.get("outholes", 0.00005)))
+        a = np.asarray(outer.getchannel("A")).copy()
+        a[y:y + h, x:x + w] = np.asarray(inner.getchannel("A"))[y:y + h, x:x + w]
+        im = inner
+        im.putalpha(Image.fromarray(a))
+    else:
+        im = cut(im, tol, holes)
     (im.resize((W, H), Image.LANCZOS) if "--keep" in argv else fit(im, W, H, "--bottom" in argv)).save(out)
     print(out, (W, H))
 
