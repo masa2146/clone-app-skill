@@ -48,6 +48,10 @@ import pano  # noqa: E402
 
 size = pano.board(f"{d}/board.png", "Test", [f"A · one|{d}/raw.png", f"B · two|{d}/raw.png"], H=200)
 check("board holds both options", size[0] > 400 and os.path.exists(f"{d}/board.png"))
+Image.new("RGB", (390, 700), (10, 120, 200)).save(f"{d}/tall.png")  # another aspect, as generators return
+size2 = pano.board(f"{d}/board2.png", "Test", [f"A · one|{d}/raw.png", f"B · two|{d}/tall.png"], H=200, cols=2,
+                   zoom=(0.25, 0.25, 0.5, 0.5), note="B: HUD drifted")
+check("zoom row adds a second row of equal-width close-ups", size2[1] > 2 * 200)
 
 check("gem.sh parses", subprocess.run(["bash", "-n", f"{ART}/gem.sh"]).returncode == 0)
 

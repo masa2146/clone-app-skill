@@ -76,6 +76,7 @@ model in code (tilting, cutting, refilling) does not rescue proportion and harmo
 ## 3. Gemini (image and video)
 
 **Driver:** `scripts/art/gem.sh` drives gemini.google.com through the gstack browser (`/browse`). Set
+`GEM_PY` to a python with Pillow if plain `python3` lacks it. Set
 `GEM_BROWSE_ROOT` to the repo whose browser profile is signed in; the browse daemon is chosen by git root,
 so a worktree opens a fresh signed-out browser. When another session shares the browser, pass `GEM_TAB`.
 The driver depends on Gemini's UI and breaks when it changes (seen: a promo popover whose invisible
@@ -93,7 +94,9 @@ flatness too: the first round of a real style board came back as our own frame w
 hero units were pixel-identical in all three options. Give the capture as a *composition sketch*: "use the
 input only for camera, layout and HUD positions; redraw every object, material and character from scratch
 at the quality of a top-grossing 3D mobile game; the units must be redesigned in this style". Then check
-the layout held. The source's quality level is set in words (§0.7: its frames are never uploaded); the
+the layout held. When no single capture shows every core element, paste the missing piece from another of
+OUR captures onto the main frame (one composite input — two frames side by side make Gemini draw two
+panels), or describe it in words ("about 15 red enemy slimes beyond the gates"). The source's quality level is set in words (§0.7: its frames are never uploaded); the
 user board may show the source's own frame as a labelled reference cell — it never goes to the generator.
 Gemini returns about 1536×2752 for 9:16 (0.558, our captures 0.5625): `pano.py` scales to one height;
 crop, never stretch, when an exact aspect matters.
@@ -132,9 +135,10 @@ try, kept across sessions. A fix never overrides the FORM line.
 **Rehearse in frame:** `ctx.py original_sprite.png capture.png ours.png sheet.jpg` erases the original in
 a real capture and drops ours in its box — the most valuable step: it catches size, contrast and style
 clashes before anything enters the engine. A 3D object has no sprite to search for: crop the object's box
-from the capture, pass the crop as the "original" with `BOX=` that box and `FILL=1`. For a whole-look option
-(style board) edit our own capture in Gemini instead ("repaint this screenshot in style X, keep layout,
-camera, HUD positions"). **Board:** `pano.py`.
+from the capture, pass the crop as the "original" with `BOX=` that box and `FILL=1`. A whole-look option
+(style board) is a Gemini redraw over our capture as described above, not a rehearsal. **Board:**
+`pano.py --cols=4 --zoom=fx,fy,fw,fh --note="..."`: full frames on top, the same close-up box (e.g. the crowd
+and the nearest gate) below, defects the generator made in the note line.
 
 **No Gemini Pro account or no signed-in browser:** the pipeline does not stop. The user generates the
 images by hand (or supplies drawings), drops them in a folder, and `fit.py` / `ctx.py` / `pano.py` run as
@@ -186,7 +190,7 @@ emoji face, neon gradient, stained glass). Gemini draws, a converter reads it in
 
 ## 7. Asking the user
 
-- Build the board with `pano.py`: options in the game frame, labelled A/B/C, the source level as one
+- **Main session only** (subagents cannot reach the user). Build the board with `pano.py`: options in the game frame, labelled A/B/C, the source level as one
   option or as a reference cell. Send it (`SendUserFile`) and give the full `/Users/...` path in a code block.
 - Then ask with `AskUserQuestion`: at most 3 options, recommendation first with one reason, and for each
   option what the player will see on screen. End with "A mı, B mi?".
@@ -194,7 +198,10 @@ emoji face, neon gradient, stained glass). Gemini draws, a converter reads it in
 - An aesthetic complaint ("dull", "cheap") gets a request for a reference game or clip BEFORE any
   prototype. Numeric fixes without a reference frame (saturation +8 %, bloom, rim) were rejected and
   rolled back.
-- A pick is written to `KARARLAR.md` with the board path; never ask it again. "Continue with your
+- A pick is written to `KARARLAR.md` with the board path; never ask it again. Right after the pick, still in
+  T013, the main session writes the style contract (palette hex values measured from the picked image,
+  brightness range, outline, shadow tone, material, light) and runs the colour-blind check on it; an old
+  decision that contradicts the pick (e.g. "art is drawn in code") is struck through in the same edit. "Continue with your
   recommendation" covers the same kind of next step, not a new kind.
 - Independent reviewer agents disagree with themselves; act only on a note that repeats or that a pixel
   measurement confirms, and after ~3 rounds without convergence give the user the round history.
@@ -228,7 +235,7 @@ If only one class was measured, the result holds for that class only — say whi
 | `gem.sh` | Gemini image/video driver over the gstack browser (`gen`, `again`, `dl`, `vid`) |
 | `fit.py` | cut a grey-background object (border + closed holes), soft edge, fit to W×H; `--full`, `--bottom`, `--keep` |
 | `ctx.py` | in-frame rehearsal: find the original in a capture, erase it, place ours, write the comparison sheet |
-| `pano.py` | labelled decision board, one height, optional grid |
+| `pano.py` | labelled decision board, one height, optional grid; `--zoom` same-box close-up row (crop to one aspect, never stretch); `--note` defect line |
 | `tripo_prep.py` | Blender: prepare an image-to-3D GLB keeping its painted texture |
 
 Dependencies: Pillow, numpy, scipy; `ctx.py` also opencv-python-headless. `tests/test-art-tools.py` checks them.
