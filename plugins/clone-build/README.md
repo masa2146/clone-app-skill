@@ -36,7 +36,15 @@ exits 0 — the model never self-certifies. Execution uses
 - `references/lessons.md` — traps two shipped clones paid days for, by phase, linked from the
   lifecycle rows: store clocks, disk budget, faithful-copy freeze, phone-only bugs, purchases,
   remote updates, Unity build traps, store review.
+- `references/art-pipeline.md` — the visual production line: user-picked style board and object
+  batches, asset-class → tool table, Gemini, in-frame rehearsal, image-to-3D, toon rules,
+  performance budget. Tools in `scripts/art/` (`gem.sh`, `fit.py`, `ctx.py`, `pano.py`, `tripo_prep.py`).
 - `teslim.py` — copy a task's evidence to `<teslim-root>/<game>/teslim/<date>/` and print full paths.
+
+## Skills
+- `clone-build` — the spine above. `/task` — the per-session task loop.
+- `temizlik` — sweep the leftovers agent sessions leave (merged worktrees and their Library copies,
+  merged branches, old logs, superseded builds, stale scratchpads); lists first, deletes on "evet".
 
 ## Tests
 ```bash

@@ -96,6 +96,40 @@ From then on every session is `/task sonraki` → work → gate → `teslim.py` 
 starts, not up front. Parallel sessions use `/task sonraki --worktree` (one folder per
 task, deleted on merge by `tasks.py temizle`).
 
+## Look and art: the user picks, the agent never self-approves
+
+**`references/art-pipeline.md`** is mandatory before any task that changes what the player
+sees (T011 quality bar and asset-class table, T013 style board, T017 performance budget,
+T018 object batches, UI, effects, store art). Its rules in one breath: art is a phase with
+user gates, not one task; the asset-class table picks the tool, and characters, hero props,
+obstacles with identity, icons and backgrounds are never built from code or engine
+primitives; design before model, drawn into the real game frame at the game camera and real
+size; options side by side with the source's own level as one option; one pipeline per
+scene; judge only in-game captures on the phone; performance measured on a mid-range phone
+from the vertical slice on. Tools: `scripts/art/` (`gem.sh` Gemini driver, `fit.py` cut,
+`ctx.py` in-frame rehearsal, `pano.py` board, `tripo_prep.py` image-to-3D prep).
+
+**Who does what.** Subagents cannot talk to the user, so visual work splits:
+
+| Step | Who |
+|---|---|
+| brief, prompts, Gemini generation, cutting, in-frame rehearsal, board | a subagent (one at a time per browser — Gemini runs in one shared browser) |
+| sending the board with full paths, `AskUserQuestion`, writing the pick to KARARLAR | **the main session only** |
+| modelling, import, shading, phone capture of the picked option | a subagent, briefed with the pick and the board path |
+| "does it match the target?" before delivery | a reviewer subagent with the target and the capture — then the user again |
+
+A subagent's report that "option B looks best" is a recommendation for the question, never
+an approval. A look reaches the build only after the user's answer.
+
+## Planning and execution
+
+Every task's Plan is written with **superpowers:writing-plans** in its detail file before
+code. Independent parts run through **superpowers:subagent-driven-development** (fresh
+subagent per part, review between parts); the main session keeps the user conversation.
+Before calling anything done, **superpowers:verification-before-completion**: the gate's
+command output, not a belief. Leftovers (merged worktrees, old builds, logs, scratch) are
+swept with the plugin's **`temizlik`** skill after every merge and weekly.
+
 **`references/lessons.md`** is the trap catalogue of two shipped clones, by phase:
 store clocks to start on day one, disk budget, faithful-copy freeze, phone-only
 visual bugs, state-machine and purchase tests, what remote updates may and may not
@@ -177,6 +211,7 @@ game plan is not built from them. It is built from what a game actually needs:
 | `mechanic` | the chapter headings of `reconstruction/02-GAMEPLAY-MECHANICS.md` | tdd |
 | `level-pipeline` | schema · editor + image importer · loader with mid-level save; then the measuring player, factor costs, planned generator and referees in the order of `references/level-pipeline.md` | tdd — a board round-trips unchanged |
 | `scene` | the **real canvas dump** `game-assets/ui/*.json`, largest first | visual-diff |
+| `art-direction` | `references/art-pipeline.md` §1: quality bar → style board → object batches | manual — the user picks from a board; the pick is in KARARLAR |
 | `tuning` | the sections of `reconstruction/05-UNKNOWNS.md` | manual — run the experiment or defer explicitly, never invent |
 
 Game `gaps` are judged on game inputs: missing `game-assets/`, `asset-guide/` or

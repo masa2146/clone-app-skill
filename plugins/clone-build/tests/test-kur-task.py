@@ -42,6 +42,11 @@ def main():
     check("pipe in a title cannot break the table", "Menu / main" in md)
     claude = open(os.path.join(proj, "CLAUDE.md")).read()
     check("CLAUDE.md starts sessions with /task sonraki", "/task sonraki" in claude and "@Docs/KAYNAK.md" in claude)
+    check("style board, performance and object batch tasks are in the book",
+          "| T013 | Stil panosu" in md and "| T017 |" in md and "| T018 |" in md)
+    check("CLAUDE.md carries the visual and decision rules",
+          "## Görsel" in claude and "AskUserQuestion" in claude and "## Kararlar: kendin ver ya da sor" in claude)
+    check("CLAUDE.md names the cleanup skill and its protected list", "`temizlik`" in claude and "Temizlikte korunanlar" in claude)
     check("bootstrap copied", os.path.exists(os.path.join(proj, "Docs", "KAYNAK.md"))
           and os.path.exists(os.path.join(proj, "Docs", "assets", "ASSET-INDEX.tsv")))
     check("Unity kit copied, runtime part outside Editor",
