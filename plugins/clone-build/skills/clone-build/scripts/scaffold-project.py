@@ -29,7 +29,7 @@ import tasks  # noqa: E402
 
 GATES = """Kapılar: G0 başlangıç (kararlar yazılı, düzen kurulu, telefonda boş sahne) · G1 çıkarım
 doğrulama (check-extraction yeşil) · G2 yön (sadakat, sanat, araç, lisans kararları) · G3 görünüm
-kilidi · G4 varlık çözümü (çizmeden önce arandı) · G5 kural kaynağı · G6 ölçü aleti kalibrasyonu ·
+kilidi (kullanıcı panodan seçti; ajan kendi onay vermez) · G4 varlık çözümü (çizmeden önce arandı) · G5 kural kaynağı · G6 ölçü aleti kalibrasyonu ·
 G7 tarama (bütün seviyeler) · G8 seviye hakemi · G9 görsel teslim (karşılaştırma, tam yollar) ·
 G10 regresyon testi · G12 cihaz QA · G13 yayın (paket taraması, lisanslar). G11 birleştirme ve
 G14 oturum sonu her işte koşar."""

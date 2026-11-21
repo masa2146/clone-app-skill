@@ -130,6 +130,9 @@ delivery, level referees) is not repeated here.
 
 ## F9 Art and sound
 
+The production side of art — gates, asset-class table, Gemini, image-to-3D, toon rules,
+performance budget — is in `art-pipeline.md`. The items below are the audit side.
+
 28. **Count the originals left in the build, every day** (T050). The first package scan
     found a forgotten font and an invisible collision mesh.
 29. **A paid shader needs a licence row before the store** (T050, T110). In one project

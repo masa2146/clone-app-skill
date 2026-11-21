@@ -27,9 +27,20 @@ project root. If `Docs/TASKS.md` is missing, tell the user to run `/clone-build 
    line restated as checks), Plan in superpowers **writing-plans** format (use the
    skill when installed; otherwise the same headings by hand), Teknik.
 3. List every permission the task will need (Unity runs, device, browser, server,
-   pushes) and ask the user **once**, in one message. No questions mid-task.
+   pushes) and ask the user **once**, in one message. No questions mid-task except the
+   visual picks below.
 4. Work the plan on the branch. A new piece of work found on the way goes to
-   `tasks.py add`, not into this task.
+   `tasks.py add`, not into this task. Independent parts of the plan go to fresh
+   subagents (superpowers **subagent-driven-development**); the main session keeps the
+   user conversation and reviews each part's evidence.
+   **If the task changes what the player sees**, read
+   `${CLAUDE_PLUGIN_ROOT}/skills/clone-build/references/art-pipeline.md` first and follow
+   its gates: options drawn in the game frame (`scripts/art/ctx.py`), a board
+   (`scripts/art/pano.py`) sent with full paths, then `AskUserQuestion` (≤ 3 options,
+   recommendation first, what the player will see, the source's own level as one option)
+   **before** building a model and again before delivery. Record the pick in KARARLAR.
+   Never approve a look yourself, and never fall back to code-drawn or primitive art for
+   a class the asset-class table gives to Gemini or image-to-3D.
 5. Run the gate named in the task's Kapı column and write each command + its result
    under "Kontroller". Gate tools: tests; clone-app `check-extraction.py` (G1);
    `VerifyImport` / `ImportUI` VerifyBatch against `expected-import.py` /

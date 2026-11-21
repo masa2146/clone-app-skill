@@ -20,7 +20,11 @@ proje bilgisi `Docs/project.json`.
   yapılır; ana klasör hep main'de kalır, aynı klasörde dal değiştirilmez. Durum belgesinde her oturum yalnız kendi satırını
   günceller; main'e birleştiren önce öbür oturuma yazar. Oturumlar arası mesaj varsa kullanıcı
   aracı yapılmaz.
-- Birleşen worktree `tasks.py temizle --yes` ile silinir. Kare dizileri mp4 üretilince silinir;
+- Birleşen worktree `tasks.py temizle --yes` ile silinir; geri kalan artıklar (eski yapılar, loglar, ham AI
+  çıktıları, scratchpad) iş birleşince ve haftada bir `temizlik` skill'iyle, önce kuru liste, onayla silinir.
+- **Temizlikte korunanlar:** imza anahtarları, clone-app çıkarımı, teslim kökü, korumalı dal/etiket, yayındaki ve
+  incelemedeki paket, seçilmiş sanat kaynakları. Bu projeye özel olanlar buraya eklenir.
+- Kare dizileri mp4 üretilince silinir;
   yapılardan yalnız yayındaki ve sonuncu tutulur; loglar `Logs/` altında. Yer tahmini `du` ile
   değil `df` öncesi/sonrası ile ölçülür. Okunmamış bir temizlik aracında `--help` denenmez.
 
@@ -37,11 +41,32 @@ proje bilgisi `Docs/project.json`.
 - Web ve UI akışı → `/qa`; seviye → hakem; Unity kodu → EditMode/PlayMode testleri; her
   düzeltilen hata küçük bir test bırakır.
 
+## Görsel (clone-build `references/art-pipeline.md`)
+
+- Oyuncunun gördüğü her şey bir panoyla kullanıcıya sorulur; ajan bir görünüşü kendi beğenisiyle
+  onaylamaz. Seçim `Docs/KARARLAR.md`'ye pano yoluyla yazılır, bir daha sorulmaz.
+- Araç varlık sınıfı tablosundan gelir (T011). Karakter, kahraman nesne, kimliği olan engel, simge ve
+  arka plan kodla ya da küre/kutu/silindirden kurulmaz: Gemini → oyun karesinde prova → model.
+- Önce tasarım, sonra model: kalıcı öğe önce gerçek oyun karesinin içine, oyun kamerasından ve gerçek
+  boyutta çizilir; seçenekler yan yana, biri kaynak oyunun kalite düzeyi.
+- Yalnız oyun içi çekime ve telefona bakılır (HD + 3× yakın plan). Aynı sahnede tek üretim yolu.
+- Orijinal oyunun görseli hiçbir üretici modele yüklenmez; görselde yazı ve logo yok.
+- Estetik şikâyette ("cansız", "ucuz") önce kullanıcıdan referans oyun ya da klip istenir.
+
+## Kararlar: kendin ver ya da sor
+
+- Kendin ver: geri alınabilen ve kuralı, kapsamı, görünüm kilidini, parayı değiştirmeyen her teknik
+  seçim (araç, yöntem, sıra, ad, düzeltme yolu). Seçimi iş dosyasına bir satırla yaz.
+- Sor: oyuncunun göreceği yeni görünüm ya da kilitten sapma; oyun kuralı, zorluk; kapsam; para, hesap,
+  lisans, dış servis, yayın; geri alınamaz iş (silme, main'e alma, push); kapı kaybederek ilerleme.
+- Cevabın sonunda "Kendi verdiğim kararlar" başlığıyla sormadan verdiğin kararları bir satırla say.
+
 ## İletişim
 
 - Önce sonuç, sonra gerekçe; tam ve düz cümle. Yeni bir adı ilk geçtiği yerde tanıt ve
   oyundan bir sahneyle örnekle.
-- Karar sorarken en fazla 3 seçenek ver, önerini başa koy, ne görüleceğini söyle.
+- Karar sorarken en fazla 3 seçenek ver, önerini başa koy, ne görüleceğini söyle; görsel kararda
+  önce panoyu gönder (tam yol), sonra AskUserQuestion ile sor.
 
 ## Mağaza
 
